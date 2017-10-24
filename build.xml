@@ -112,7 +112,6 @@
 
   <target name="-compile-main" if="have_main">
     <mkdir dir="build/main"/>
-    <mkdir dir="build/converter"/>    
     <javac srcdir="src/main" destdir="build/main" includeantruntime="false"
            debug="${debug}" source="${src_level}" deprecation="${deprecation}"
            classpathref="lib.path"/>
