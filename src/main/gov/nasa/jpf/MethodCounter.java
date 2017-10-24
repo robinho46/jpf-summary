@@ -18,7 +18,7 @@
 
 package gov.nasa.jpf;
 
-private class MethodCounter {
+public class MethodCounter {
   public MethodCounter(){
     totalCalls = 0;
     runningAlone = 0;

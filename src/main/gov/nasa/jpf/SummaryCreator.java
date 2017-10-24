@@ -77,12 +77,7 @@ public class SummaryCreator extends ListenerAdapter {
 
 
   static HashMap<String,MethodContext> contextMap = new HashMap<>();
-  
-
-  
   static HashMap<String,MethodCounter> counterMap = new HashMap<>();
-  
-
 
   boolean skipInit = false;
 
