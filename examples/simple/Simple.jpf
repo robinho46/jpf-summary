@@ -8,6 +8,6 @@ extensions=${jpf-core}
 report.console.property_violation=result,error,trace,snapshot
 vm.reuse_tid=false
 
-listener=.
+
 jpf-net-iocache.native_classpath=.
 jpf-net-iocache.classpath=.
