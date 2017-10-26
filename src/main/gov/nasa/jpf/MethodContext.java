@@ -20,6 +20,7 @@ package gov.nasa.jpf;
 
 import gov.nasa.jpf.vm.VM;
 import gov.nasa.jpf.vm.StackFrame;
+import gov.nasa.jpf.vm.ClassInfo;
 import gov.nasa.jpf.vm.MethodInfo;
 import gov.nasa.jpf.vm.ThreadInfo;
 import gov.nasa.jpf.vm.ElementInfo;
@@ -40,22 +41,68 @@ public class MethodContext {
     dependentStaticFields = new HashMap<>();
   }
 
-  // currently only checks the arguments to the function
-  public boolean match(Object[] args) {
+  public boolean match(Object[] args, MethodInfo mi) {
+    if(!argumentsMatch(args))
+      return false;
+
+    // at this point we know that the arguments match, 
+    // so any field operations that access fields
+    // of arguments are safe
+    if(!staticFieldsMatch())
+      return false;
+
+    // now both args and static fields are guaranteed to match
+    if(!fieldsMatch())
+      return false;
+
+    return true;
+  }
+
+  private boolean valuesEqual(Object oldValue, Object currentValue) {
+      if(oldValue == null) {
+        if(currentValue == null)
+          return true;
+        else
+          return false;
+      }
+
+      return oldValue.equals(currentValue);
+  }
+
+  private boolean fieldsMatch() {
+    for(String fieldName : dependentFields.keySet()) {
+      DependentFieldData fieldData = dependentFields.get(fieldName);
+      Object oldValue = fieldData.previousValue;
+      Object currentValue = fieldData.sourceObject.getFieldValueObject(fieldName);
+      if(!valuesEqual(oldValue,currentValue))
+        return false;
+    }
+
+    return true;
+  }
+
+  private boolean staticFieldsMatch() {
+    for(String fieldName : dependentStaticFields.keySet()) {
+      DependentFieldData fieldData = dependentFields.get(fieldName);
+      ClassInfo ci = fieldData.classInfo;
+      Object oldValue = fieldData.previousValue;
+      Object currentValue = ci.getStaticFieldValueObject(fieldName);
+
+      if(!valuesEqual(oldValue,currentValue))
+        return false;
+    }
+
+    return true;
+  }
+
+  private boolean argumentsMatch(Object[] args) {
     if(args.length != params.length) {
       // throw new exception?
       return false;
     }
 
     for(int i=0; i<args.length; i++) {
-      if(args[i] == null) {
-        if(params[i] != null)
-          return false;
-        
-        continue;
-      }
-      
-      if(!args[i].equals(params[i]))
+      if(!valuesEqual(args[i],params[i]))
         return false;
     }
 
@@ -71,60 +118,46 @@ public class MethodContext {
   }
 
   public void addField(String fieldName, ElementInfo source, Object value) {
-    dependentFields.put(fieldName, new FieldData(source, value));
+    dependentFields.put(fieldName, new DependentFieldData(source, value));
   }
 
-  public void addStaticField(String fieldName, Object value) {
-    dependentStaticFields.put(fieldName,value);
+  public void addStaticField(String fieldName, Object value, ClassInfo ci) {
+    dependentStaticFields.put(fieldName,new DependentFieldData( value, ci));
   }
 
-  public Set<String> getStaticFieldNames() {
-    return dependentStaticFields.keySet();
-  }
-
-  public Set<String> getFieldNames() {
-    return dependentFields.keySet();
-  }
-
-  public Object getStaticFieldValue(String fieldName) {
-    return dependentStaticFields.get(fieldName);
-  }
-
-  public Object getFieldValue(String fieldName) {
-    if(!dependentFields.containsKey(fieldName))
-      return null;
-    return dependentFields.get(fieldName).previousValue;
-  }
-
-  public ElementInfo getSourceObject(String fieldName) {
-    if(!dependentFields.containsKey(fieldName))
-      return null;
-    return dependentFields.get(fieldName).sourceObject; 
-  }
 
   private Object[] params;
   // We need to track Objectref, FieldName, Type(?), Value 
-  private HashMap<String,FieldData> dependentFields;
-  private HashMap<String,Object> dependentStaticFields;
+  private HashMap<String,DependentFieldData> dependentFields;
+  private HashMap<String,DependentFieldData> dependentStaticFields;
 
-  private class FieldData {
-    public FieldData(ElementInfo ei, Object val) {
+  private class DependentFieldData {
+    public DependentFieldData(ElementInfo ei, Object previousValue) {
       sourceObject = ei;
-      previousValue = val;
+      this.previousValue = previousValue;
+    }
+
+    // for static fields
+    public DependentFieldData(Object previousValue, ClassInfo ci) {
+      this.previousValue = previousValue;
+      classInfo = ci;
     }
 
     public String toString() {
       return sourceObject.toString() + " " + previousValue.toString();
     }
 
-    // This might be a massive mistake
+    // This might be a mistake
     // It will probably not be easily testable
     // It will also reduce the applicability somewhat,
     // as now we must ensure that it's the *same* object
     // this means args must match exactly (including *this*).
     //
     // If it's a reference to a reference... We may have issues. We'll see
+    // for non-static fields
     public ElementInfo sourceObject;
     public Object previousValue;
+    // only needed/valid for Static fields
+    public ClassInfo classInfo;
   }
 }

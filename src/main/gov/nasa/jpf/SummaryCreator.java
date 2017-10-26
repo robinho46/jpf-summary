@@ -182,9 +182,6 @@ public class SummaryCreator extends ListenerAdapter {
       if(!contextMap.containsKey(methodName)) {
         Object[] args = call.getArgumentValues(ti);
         contextMap.put(methodName, new MethodContext(args));
-      } else {
-        if(contextMap.get(methodName).match(call.getArgumentValues(ti)))
-          counterMap.get(methodName).argsMatchCount++;          
       }
       // if(mi.getName().equals("<init>") || mi.getName().equals("<clinit>")){
       //   blackList.add(methodName);
@@ -197,32 +194,12 @@ public class SummaryCreator extends ListenerAdapter {
       if(!recorded.contains(methodName)) {
         recording.add(methodName);
       }else{
+        if(!contextMap.get(methodName).match(call.getArgumentValues(ti), mi)) {
+          return;
+        }
+        counterMap.get(methodName).argsMatchCount++;
         replacedCalls++;
-
-        MethodContext context = contextMap.get(methodName);
-        Set<String> staticFieldNames = context.getStaticFieldNames();
-        Set<String> fieldNames = context.getFieldNames();
-
-        for (String fieldName : staticFieldNames) {
-          //out.println(fieldName + " used to be " + context.getStaticFieldValue(fieldName));
-          String[] arr = fieldName.split("\\.");
-          // if classname matches that of the current method
-          Object currentValue = mi.getClassInfo().getStaticFieldValueObject(arr[arr.length-1]);
-          //out.println("Now it's " + currentValue);
-          //out.println();
-        }
-
-        for (String fieldName : fieldNames) {
-         // out.println(fieldName + " used to be " + context.getFieldValue(fieldName));
-          String[] arr = fieldName.split("\\.");
-          ElementInfo source = context.getSourceObject(fieldName);
-
-          
-          Object currentValue = source.getFieldValueObject(arr[arr.length-1]);
-          //out.println("Now it's " + currentValue);
-          //out.println();
-          
-        }
+        
 
       }
     } else if (executedInsn instanceof JVMReturnInstruction) {
@@ -264,20 +241,20 @@ public class SummaryCreator extends ListenerAdapter {
         counter.readCount++;
 
         if(finsn instanceof GETFIELD) {
-          if(context.containsField(finsn.getVariableId()))
+          if(context.containsField(finsn.getFieldName()))
             return;
 
-          context.addField(finsn.getVariableId(),ei,ei.getFieldValueObject(fi.getName()));
+          context.addField(finsn.getFieldName(),ei,ei.getFieldValueObject(fi.getName()));
 
-          //out.println(finsn.getVariableId());
-          //out.println(context.getFieldValue(finsn.getVariableId()));
+          //out.println(finsn.getFieldName());
+          //out.println(context.getFieldValue(finsn.getFieldName()));
         } else if (finsn instanceof GETSTATIC) {
-          if(context.containsStaticField(finsn.getVariableId()))
+          if(context.containsStaticField(finsn.getFieldName()))
             return;
 
-          context.addStaticField(finsn.getVariableId(),ei.getFieldValueObject(fi.getName()));
-          //out.println(finsn.getVariableId());
-          //out.println(context.getStaticFieldValue(finsn.getVariableId()));
+          context.addStaticField(finsn.getFieldName(),ei.getFieldValueObject(fi.getName()),fi.getClassInfo());
+          //out.println(finsn.getFieldName());
+          //out.println(context.getStaticFieldValue(finsn.getFieldName()));
         }
 
       } else {
@@ -386,8 +363,9 @@ public class SummaryCreator extends ListenerAdapter {
     out.println("]}");
 
 
+    out.println("replacedCalls " + replacedCalls);
     out.println("Saved instructions (at MOST) " + savedInstructions);
-    out.println("We could have saved an additional " + missedInsnsNative + " if we'd managed native calls");
+    //out.println("We could have saved an additional " + missedInsnsNative + " if we'd managed native calls");
     out.println();    
     out.println("We called " + uniqueMethods + " methods.");
     out.println(recordedMethods + " of these were recorded.");
