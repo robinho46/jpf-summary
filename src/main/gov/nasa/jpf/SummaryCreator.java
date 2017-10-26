@@ -174,7 +174,7 @@ public class SummaryCreator extends ListenerAdapter {
 
 
       if(!counterMap.containsKey(methodName)) {
-        counterMap.put(methodName, new MethodCounter());
+        counterMap.put(methodName, new MethodCounter(methodName));
       }
       counterMap.get(methodName).totalCalls++;
       counterMap.get(methodName).instructionCount = mi.getNumberOfInstructions();
@@ -204,23 +204,23 @@ public class SummaryCreator extends ListenerAdapter {
         Set<String> fieldNames = context.getFieldNames();
 
         for (String fieldName : staticFieldNames) {
-          out.println(fieldName + " used to be " + context.getStaticFieldValue(fieldName));
+          //out.println(fieldName + " used to be " + context.getStaticFieldValue(fieldName));
           String[] arr = fieldName.split("\\.");
           // if classname matches that of the current method
           Object currentValue = mi.getClassInfo().getStaticFieldValueObject(arr[arr.length-1]);
-          out.println("Now it's " + currentValue);
-          out.println();
+          //out.println("Now it's " + currentValue);
+          //out.println();
         }
 
         for (String fieldName : fieldNames) {
-          out.println(fieldName + " used to be " + context.getFieldValue(fieldName));
+         // out.println(fieldName + " used to be " + context.getFieldValue(fieldName));
           String[] arr = fieldName.split("\\.");
           ElementInfo source = context.getSourceObject(fieldName);
 
           
           Object currentValue = source.getFieldValueObject(arr[arr.length-1]);
-          out.println("Now it's " + currentValue);
-          out.println();
+          //out.println("Now it's " + currentValue);
+          //out.println();
           
         }
 
@@ -260,10 +260,7 @@ public class SummaryCreator extends ListenerAdapter {
         ElementInfo ei = finsn.getLastElementInfo();
         FieldInfo fi = finsn.getFieldInfo();
         int storageOffset = fi.getStorageOffset();
-        if(storageOffset == -1) {
-          out.println("THIS SHOULD NEVER HAPPEN");
-          return;
-        }
+        assert(storageOffset != -1);
         counter.readCount++;
 
         if(finsn instanceof GETFIELD) {
@@ -287,6 +284,7 @@ public class SummaryCreator extends ListenerAdapter {
         counter.writeCount++;
       }
     } else {
+      // is write
     }
   } 
 
@@ -329,51 +327,64 @@ public class SummaryCreator extends ListenerAdapter {
     int nativeMethodInterrupts = 0;
 
 
-  
+    out.print("{methodStats:[");
     for(String methodName : counterMap.keySet()) {
       MethodCounter counter = counterMap.get(methodName);
+      uniqueMethods++;
       assert(counter != null);
       if(!counter.recorded && !counter.interrupted()) {
-        out.println(methodName + " was neither recorded nor interrupted...");
+        /*out.println(methodName + " was neither recorded nor interrupted...");
         out.println("called "+ counter.totalCalls + " times");
         out.println("skipping");
-        out.println();
+        out.println();*/
         continue;
       }
+
 
       assert(!(counter.interrupted() && counter.recorded));
       // methods that are only called once are unneccessary
-      if(counter.totalCalls == 1) {
+      /*if(counter.totalCalls == 1) {
         out.println(methodName + " only called once.");
         continue;
-      }
+      }*/
 
-      uniqueMethods++;
       if(counter.recorded ) {
-      out.println(methodName);
-      out.println(counter);
+        //out.println(methodName);
+        out.print(counter + ",");
         recordedMethods++;
         // the summary needs to at least repeat reads and writes
         // each write requires two stores and one write
         // we can't summarise the first call to the function
-        savedInstructions += (counter.instructionCount-counter.readCount-(3*counter.writeCount))
-                              * (counter.totalCalls-1);
+        savedInstructions += counter.instructionCount * (counter.totalCalls-1);
+        //(counter.instructionCount-counter.readCount-(3*counter.writeCount))
+                              //* (counter.totalCalls-1);
       }
 
       if(counter.interruptedByNativeCall){
-        nativeMethodInterrupts++;
+        nativeMethodInterrupts++;/*
+        if(((counter.instructionCount-counter.readCount-(3*counter.writeCount))
+                               * (counter.totalCalls-1)) <= 0) {
+          out.println("instructionCount=" + counter.instructionCount);
+          out.println("readCount=" + counter.readCount);
+          out.println("3*writeCount=" + 3*counter.writeCount);
+          out.println("totalcalls-1=" + (counter.totalCalls-1));
+        }
+        assert(((counter.instructionCount-counter.readCount-(3*counter.writeCount))
+                               * (counter.totalCalls-1)) >= 0);
         out.println("accounts for " + 
                       ((counter.instructionCount-counter.readCount-(3*counter.writeCount))
                                * (counter.totalCalls-1)) + " instructions");
         missedInsnsNative += (counter.instructionCount-counter.readCount-(3*counter.writeCount))
-                               * (counter.totalCalls-1);
+                               * (counter.totalCalls-1);*/
       }
       if(counter.interruptedByTransition){
         transitionInterrupts++;
       }
 
-      out.println();
+      //out.println();
     }
+    out.println("]}");
+
 
     out.println("Saved instructions (at MOST) " + savedInstructions);
     out.println("We could have saved an additional " + missedInsnsNative + " if we'd managed native calls");
@@ -383,15 +394,6 @@ public class SummaryCreator extends ListenerAdapter {
     out.println(nativeMethodInterrupts + " were interrupted by Native Method Calls");
     out.println(transitionInterrupts + " were interrupted by Transitions");
     
-/*
-    out.println();
-    out.println("Total number of method calls " + (staticCalls+virtualCalls+specialCalls+interfaceCalls));
-    out.println("Potentially replaced calls " + replacedCalls);
-    out.println("Static calls " + staticCalls);
-    out.println("Virtual calls " + virtualCalls);
-    out.println("Special calls " + specialCalls);
-    out.println("Interface calls " + interfaceCalls);
-*/
 
     /*
     out.println();

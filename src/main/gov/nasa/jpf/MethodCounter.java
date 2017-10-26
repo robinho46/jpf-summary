@@ -19,7 +19,8 @@
 package gov.nasa.jpf;
 
 public class MethodCounter {
-  public MethodCounter(){
+  public MethodCounter(String methodName){
+    this.methodName = methodName;
     totalCalls = 0;
     runningAlone = 0;
     recorded = false;
@@ -40,6 +41,19 @@ public class MethodCounter {
 
   @Override
   public String toString() {
+    String str = "{\"methodName\":\"" + methodName + "\"";
+    str += ",\"totalCalls\":"+totalCalls;
+    str += ",\"readCount\":"+readCount;
+    str += ",\"writeCount\":"+writeCount;
+    str += ",\"instructionCount\":" + instructionCount;
+    str += ",\"interruptedByNativeCall\":" + interruptedByNativeCall;
+    str += ",\"interruptedByTransition\":" + interruptedByTransition;
+    str += ",\"argsMatchCount\":" + argsMatchCount;
+    str += "}";
+    return str;
+  }
+  
+  public String toReadableString() {
     String str = "called " + totalCalls + " times";
     if(readCount > 0)
       str += "\nreadCount=" + readCount;
@@ -60,7 +74,7 @@ public class MethodCounter {
 
     return str;
   }
-  
+  public String methodName;
 
   public int totalCalls;
   
