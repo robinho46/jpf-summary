@@ -40,7 +40,7 @@ public class Simple  {
     
     new Simple().doSomethingElse(5,true);
     x = 0;
-    write(42);
+    write(37);
       
 
     if(x==42){

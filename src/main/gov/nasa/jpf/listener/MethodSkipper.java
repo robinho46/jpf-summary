@@ -60,16 +60,14 @@ public class MethodSkipper extends ListenerAdapter {
     if (skipInit) {
       skip = true;
     }
-    methodToSkip = "write(I)V";
+    methodToSkip = "write";
     out = new PrintWriter(System.out, true);
   }
 
 
   @Override
   public void instructionExecuted (VM vm, ThreadInfo thread, Instruction nextInsn, Instruction executedInsn) {
-    ThreadInfo ti = thread;
     MethodInfo mi = executedInsn.getMethodInfo();
-    ElementInfo ei ;
 
     if (skip) {
       if (mi == miMain) {
@@ -81,17 +79,17 @@ public class MethodSkipper extends ListenerAdapter {
 
     if (executedInsn instanceof JVMInvokeInstruction) {
       JVMInvokeInstruction call = (JVMInvokeInstruction)executedInsn;
-      mi = call.getInvokedMethod(ti);
+      mi = call.getInvokedMethod(thread);
 
-      if (ti.getNextPC() == call) 
+      if (thread.getNextPC() == call) 
         return;
 
-      if(mi.getUniqueName().equals(methodToSkip)) {
-        Instruction nextInstruction = ti.getPC().getNext();
+      if(mi.getName().equals(methodToSkip)) {
+        Instruction nextInstruction = thread.getPC().getNext();
         while(!(nextInstruction instanceof JVMReturnInstruction)){
           nextInstruction = nextInstruction.getNext();
         }
-        ti.skipInstruction(nextInstruction);
+        thread.skipInstruction(nextInstruction);
       }
     }
   } 

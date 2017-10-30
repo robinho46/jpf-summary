@@ -41,7 +41,38 @@ public class MethodContext {
     dependentStaticFields = new HashMap<>();
   }
 
-  public boolean match(Object[] args, MethodInfo mi) {
+  @Override
+  public String toString() {
+    if(params.length == 0 && dependentFields.size() == 0 && dependentStaticFields.size() == 0) {
+      return "empty";
+    }
+
+    String res = "{contextSize:" + (params.length + dependentFields.size() + dependentStaticFields.size());
+    res+= ", args:[";
+    //sb.append("{args:[");
+    for(Object arg : params) {
+      if(arg != params[params.length-1]){
+        res += "\""+arg+"\",";
+      }else{
+        res+= "\""+arg+"\"";
+      }
+    }
+    res += "], fields:[";
+    for(String fieldName : dependentFields.keySet()) {
+      DependentFieldData fieldData = dependentFields.get(fieldName);
+      res += "{\"" + fieldName + "\":\"" + fieldData.sourceObject + "=" + fieldData.previousValue +"\"},";
+    }
+    res += "], staticFields:[";
+
+    for(String fieldName : dependentStaticFields.keySet()) {
+      DependentFieldData fieldData = dependentStaticFields.get(fieldName);
+      res += "{\"" + fieldName + "\":\"" + fieldData.classInfo + "=" + fieldData.previousValue +"\"},";
+    }
+    res+= "]}";
+    return res;
+  }
+
+  public boolean match(Object[] args) {
     if(!argumentsMatch(args))
       return false;
 
@@ -74,8 +105,9 @@ public class MethodContext {
       DependentFieldData fieldData = dependentFields.get(fieldName);
       Object oldValue = fieldData.previousValue;
       Object currentValue = fieldData.sourceObject.getFieldValueObject(fieldName);
-      if(!valuesEqual(oldValue,currentValue))
+      if(!valuesEqual(oldValue,currentValue)) {
         return false;
+      }
     }
 
     return true;
@@ -83,7 +115,7 @@ public class MethodContext {
 
   private boolean staticFieldsMatch() {
     for(String fieldName : dependentStaticFields.keySet()) {
-      DependentFieldData fieldData = dependentFields.get(fieldName);
+      DependentFieldData fieldData = dependentStaticFields.get(fieldName);
       ClassInfo ci = fieldData.classInfo;
       Object oldValue = fieldData.previousValue;
       Object currentValue = ci.getStaticFieldValueObject(fieldName);
@@ -121,8 +153,8 @@ public class MethodContext {
     dependentFields.put(fieldName, new DependentFieldData(source, value));
   }
 
-  public void addStaticField(String fieldName, Object value, ClassInfo ci) {
-    dependentStaticFields.put(fieldName,new DependentFieldData( value, ci));
+  public void addStaticField(String fieldName, ClassInfo ci, Object value) {
+    dependentStaticFields.put(fieldName,new DependentFieldData(ci, value));
   }
 
 
@@ -138,9 +170,9 @@ public class MethodContext {
     }
 
     // for static fields
-    public DependentFieldData(Object previousValue, ClassInfo ci) {
-      this.previousValue = previousValue;
+    public DependentFieldData(ClassInfo ci, Object previousValue) {
       classInfo = ci;
+      this.previousValue = previousValue;
     }
 
     public String toString() {

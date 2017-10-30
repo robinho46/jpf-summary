@@ -25,6 +25,8 @@ import gov.nasa.jpf.jvm.bytecode.INVOKEVIRTUAL;
 import gov.nasa.jpf.jvm.bytecode.INVOKESTATIC;
 import gov.nasa.jpf.jvm.bytecode.GETFIELD;
 import gov.nasa.jpf.jvm.bytecode.GETSTATIC;
+import gov.nasa.jpf.jvm.bytecode.PUTFIELD;
+import gov.nasa.jpf.jvm.bytecode.PUTSTATIC;
 import gov.nasa.jpf.jvm.bytecode.INVOKEINTERFACE;
 import gov.nasa.jpf.jvm.bytecode.EXECUTENATIVE;
 import gov.nasa.jpf.jvm.bytecode.JVMInvokeInstruction;
@@ -68,16 +70,13 @@ public class SummaryCreator extends ListenerAdapter {
   static HashSet<String> nativeWhiteList = new HashSet<>();
 
 
-  int staticCalls = 0;
-  int specialCalls = 0;
-  int virtualCalls = 0;
-  int interfaceCalls = 0;
 
   int replacedCalls = 0;
 
 
   static HashMap<String,MethodContext> contextMap = new HashMap<>();
   static HashMap<String,MethodCounter> counterMap = new HashMap<>();
+  static HashMap<String,MethodModifications> modificationMap = new HashMap<>();
 
   boolean skipInit = false;
 
@@ -100,14 +99,27 @@ public class SummaryCreator extends ListenerAdapter {
     nativeWhiteList.add("hashCode");
     nativeWhiteList.add("min");
     nativeWhiteList.add("max");
+    // this might not be quite right
+    nativeWhiteList.add("forName");
 
     out = new PrintWriter(System.out, true);
+  }
+
+  public void resetRecording(String nativeMethodName) {
+    for(String r : recording) {
+      MethodCounter counter = counterMap.get(r);
+      counter.interruptedByNativeCall = true; 
+      counter.interruptingMethod = nativeMethodName;
+      blackList.add(r);
+    }
+    recording = new HashSet<>();
   }
 
   public void resetRecording() {
     for(String r : recording) {
       MethodCounter counter = counterMap.get(r);
       counter.interruptedByTransition = true; 
+
       blackList.add(r);
     }
     recording = new HashSet<>();
@@ -140,10 +152,6 @@ public class SummaryCreator extends ListenerAdapter {
         return;
       }
     }
-
-    //out.println(executedInsn);
-
-
     if (executedInsn instanceof JVMInvokeInstruction) {
       JVMInvokeInstruction call = (JVMInvokeInstruction)executedInsn;
       ti = thread;
@@ -156,22 +164,11 @@ public class SummaryCreator extends ListenerAdapter {
       // if the invocation is blocked, do nothing
       if (ti.getNextPC() == call) 
         return;
-      
-
-
-      if(executedInsn instanceof INVOKESTATIC) {
-        staticCalls++;
-      } else if(executedInsn instanceof INVOKEVIRTUAL) {
-        virtualCalls++;
-      } else if(executedInsn instanceof INVOKESPECIAL) {
-        specialCalls++;
-      } else if(executedInsn instanceof INVOKEINTERFACE) {
-        interfaceCalls++;
-      }
 
       String methodName = mi.getFullName();
-
-
+      if(blackList.contains(methodName)) {
+        return;
+      }
 
       if(!counterMap.containsKey(methodName)) {
         counterMap.put(methodName, new MethodCounter(methodName));
@@ -183,24 +180,23 @@ public class SummaryCreator extends ListenerAdapter {
         Object[] args = call.getArgumentValues(ti);
         contextMap.put(methodName, new MethodContext(args));
       }
-      // if(mi.getName().equals("<init>") || mi.getName().equals("<clinit>")){
-      //   blackList.add(methodName);
-      // }
-
-      if(blackList.contains(methodName)) {
-        return;
+      
+      if(!modificationMap.containsKey(methodName)) {
+        modificationMap.put(methodName, new MethodModifications(call.getArgumentValues(ti)));
       }
 
       if(!recorded.contains(methodName)) {
         recording.add(methodName);
       }else{
-        if(!contextMap.get(methodName).match(call.getArgumentValues(ti), mi)) {
+        // method has been recorded, so summary exists
+        if(!contextMap.get(methodName).match(call.getArgumentValues(ti))) {
           return;
         }
+        modificationMap.get(methodName).applyModifications();
+
+
         counterMap.get(methodName).argsMatchCount++;
         replacedCalls++;
-        
-
       }
     } else if (executedInsn instanceof JVMReturnInstruction) {
       Instruction ret = executedInsn;
@@ -218,13 +214,7 @@ public class SummaryCreator extends ListenerAdapter {
         return;
 
 
-      for(String r : recording) {
-        MethodCounter counter = counterMap.get(r);
-        counter.interruptingMethod = methodName;
-        counter.interruptedByNativeCall = true; 
-        blackList.add(r);
-      }
-      recording = new HashSet<>();
+      resetRecording(methodName);
     } else if(executedInsn instanceof FieldInstruction) {
       String methodName = mi.getFullName();
       if(!recording.contains(methodName))
@@ -234,34 +224,46 @@ public class SummaryCreator extends ListenerAdapter {
       MethodCounter counter = counterMap.get(methodName);
       MethodContext context = contextMap.get(methodName);
       if(finsn.isRead()){
+        counter.readCount++;
         ElementInfo ei = finsn.getLastElementInfo();
         FieldInfo fi = finsn.getFieldInfo();
         int storageOffset = fi.getStorageOffset();
         assert(storageOffset != -1);
-        counter.readCount++;
 
         if(finsn instanceof GETFIELD) {
-          if(context.containsField(finsn.getFieldName()))
-            return;
-
-          context.addField(finsn.getFieldName(),ei,ei.getFieldValueObject(fi.getName()));
-
-          //out.println(finsn.getFieldName());
-          //out.println(context.getFieldValue(finsn.getFieldName()));
-        } else if (finsn instanceof GETSTATIC) {
-          if(context.containsStaticField(finsn.getFieldName()))
-            return;
-
-          context.addStaticField(finsn.getFieldName(),ei.getFieldValueObject(fi.getName()),fi.getClassInfo());
-          //out.println(finsn.getFieldName());
-          //out.println(context.getStaticFieldValue(finsn.getFieldName()));
+          // add to the methods above in the call-stack
+          for(String stackMethodName : recording) {
+            if(contextMap.get(stackMethodName).containsField(finsn.getFieldName()))
+              contextMap.get(stackMethodName).addField(finsn.getFieldName(), ei, ei.getFieldValueObject(fi.getName()));
+          }
+        }  else if (finsn instanceof GETSTATIC) {
+          // add to the methods above in the call-stack
+          for(String stackMethodName : recording) {
+            if(contextMap.get(stackMethodName).containsStaticField(finsn.getFieldName()))
+              contextMap.get(stackMethodName).addStaticField(finsn.getFieldName(),fi.getClassInfo(),ei.getFieldValueObject(fi.getName()));
+          }
         }
-
       } else {
         counter.writeCount++;
+        ElementInfo ei = finsn.getLastElementInfo();
+        FieldInfo fi = finsn.getFieldInfo();
+        int storageOffset = fi.getStorageOffset();
+        assert(storageOffset != -1);
+
+        if(finsn instanceof PUTFIELD) {
+          for(String stackMethodName : recording) {
+            modificationMap.get(stackMethodName).addField(finsn.getFieldName(), ei, ei.getFieldValueObject(fi.getName()));
+          }
+          
+        } else if(finsn instanceof PUTSTATIC) {
+          for(String stackMethodName : recording) {
+            modificationMap.get(stackMethodName).addStaticField(finsn.getFieldName(), fi.getClassInfo(), ei.getFieldValueObject(fi.getName()));
+          }
+          
+        }
       }
     } else {
-      // is write
+      // is other instruction
     }
   } 
 
@@ -304,76 +306,6 @@ public class SummaryCreator extends ListenerAdapter {
     int nativeMethodInterrupts = 0;
 
 
-    out.print("{methodStats:[");
-    for(String methodName : counterMap.keySet()) {
-      MethodCounter counter = counterMap.get(methodName);
-      uniqueMethods++;
-      assert(counter != null);
-      if(!counter.recorded && !counter.interrupted()) {
-        /*out.println(methodName + " was neither recorded nor interrupted...");
-        out.println("called "+ counter.totalCalls + " times");
-        out.println("skipping");
-        out.println();*/
-        continue;
-      }
-
-
-      assert(!(counter.interrupted() && counter.recorded));
-      // methods that are only called once are unneccessary
-      /*if(counter.totalCalls == 1) {
-        out.println(methodName + " only called once.");
-        continue;
-      }*/
-
-      if(counter.recorded ) {
-        //out.println(methodName);
-        out.print(counter + ",");
-        recordedMethods++;
-        // the summary needs to at least repeat reads and writes
-        // each write requires two stores and one write
-        // we can't summarise the first call to the function
-        savedInstructions += counter.instructionCount * (counter.totalCalls-1);
-        //(counter.instructionCount-counter.readCount-(3*counter.writeCount))
-                              //* (counter.totalCalls-1);
-      }
-
-      if(counter.interruptedByNativeCall){
-        nativeMethodInterrupts++;/*
-        if(((counter.instructionCount-counter.readCount-(3*counter.writeCount))
-                               * (counter.totalCalls-1)) <= 0) {
-          out.println("instructionCount=" + counter.instructionCount);
-          out.println("readCount=" + counter.readCount);
-          out.println("3*writeCount=" + 3*counter.writeCount);
-          out.println("totalcalls-1=" + (counter.totalCalls-1));
-        }
-        assert(((counter.instructionCount-counter.readCount-(3*counter.writeCount))
-                               * (counter.totalCalls-1)) >= 0);
-        out.println("accounts for " + 
-                      ((counter.instructionCount-counter.readCount-(3*counter.writeCount))
-                               * (counter.totalCalls-1)) + " instructions");
-        missedInsnsNative += (counter.instructionCount-counter.readCount-(3*counter.writeCount))
-                               * (counter.totalCalls-1);*/
-      }
-      if(counter.interruptedByTransition){
-        transitionInterrupts++;
-      }
-
-      //out.println();
-    }
-    out.println("]}");
-
-
-    out.println("replacedCalls " + replacedCalls);
-    out.println("Saved instructions (at MOST) " + savedInstructions);
-    //out.println("We could have saved an additional " + missedInsnsNative + " if we'd managed native calls");
-    out.println();    
-    out.println("We called " + uniqueMethods + " methods.");
-    out.println(recordedMethods + " of these were recorded.");
-    out.println(nativeMethodInterrupts + " were interrupted by Native Method Calls");
-    out.println(transitionInterrupts + " were interrupted by Transitions");
-    
-
-    /*
     out.println();
     out.print("native-method-list:");
     for(String mName : counterMap.keySet()) {
@@ -383,8 +315,61 @@ public class SummaryCreator extends ListenerAdapter {
 
       out.print(counter.interruptingMethod + ",");
     }
+    out.println();
 
-    out.println();*/
+    StringBuilder methodStats = new StringBuilder();
+    methodStats.append("{methodStats:[");
+    for(String methodName : counterMap.keySet()) {
+      MethodCounter counter = counterMap.get(methodName);
+      MethodContext context = contextMap.get(methodName);
+      uniqueMethods++;
+      assert(counter != null);
+      if(!counter.recorded && !counter.interrupted()) {
+        // this shouldn't happen, but seems to be the case for some methods
+        // particularly <init>
+        continue;
+      }
+
+
+      assert(!(counter.interrupted() && counter.recorded));
+
+      if(counter.recorded ) {
+        methodStats.append(counter + ",");
+        recordedMethods++;
+        savedInstructions += counter.instructionCount * (counter.totalCalls-1);
+        //String contextString = context.toString();
+        /*
+        if(!contextString.equals("empty") && counter.totalCalls-1 != 0) {
+          out.println(methodName+".context = " + context );
+          out.println("matched " + counter.argsMatchCount + "/" + (counter.totalCalls-1) + " times");
+        }*/
+      }
+
+      if(counter.interruptedByNativeCall){
+        nativeMethodInterrupts++;
+      }
+      if(counter.interruptedByTransition){
+        transitionInterrupts++;
+      }
+
+      //out.println();
+    }
+    methodStats.deleteCharAt(methodStats.length()-1);
+    methodStats.append("]}");
+    out.println(methodStats.toString());
+
+
+    out.println("replacedCalls " + replacedCalls);
+    out.println("Saved instructions (bad approximation) " + savedInstructions);
+    out.println();    
+    out.println("We called " + uniqueMethods + " methods.");
+    out.println(recordedMethods + " of these were recorded.");
+    out.println(nativeMethodInterrupts + " were interrupted by Native Method Calls");
+    out.println(transitionInterrupts + " were interrupted by Transitions");
+    
+
+    
+    out.println();
 
   }
 

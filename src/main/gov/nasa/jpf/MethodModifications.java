@@ -45,9 +45,64 @@ public class MethodModifications {
   private HashMap<String,ModifiedFieldData> modifiedFields;
   private HashMap<String,ModifiedFieldData> modifiedStaticFields;
 
+
+  public void applyFieldUpdate(String fieldName, ElementInfo ei, Object newValue) {
+    // if reference object?
+
+    // basic types
+    if(ei.instanceOf("I")) {
+      ei.setIntField(fieldName, (Integer) newValue);
+    } else if(ei.instanceOf("F")) {
+      ei.setFloatField(fieldName, (Float) newValue);
+    } else if(ei.instanceOf("C")) {
+      ei.setCharField(fieldName, (char) newValue);
+    } else if(ei.instanceOf("B")) {
+      ei.setByteField(fieldName, (Byte) newValue);
+    } else if(ei.instanceOf("D")) {
+      ei.setDoubleField(fieldName, (Double) newValue);
+    } else if(ei.instanceOf("J")) {
+      ei.setLongField(fieldName, (Long) newValue);
+    } else if(ei.instanceOf("S")) {
+      ei.setShortField(fieldName, (Short) newValue);
+    } else if(ei.instanceOf("Z")) {
+      ei.setBooleanField(fieldName, (Boolean) newValue);
+    } else if(ei.instanceOf("[")) {
+      // might be problematic - see nhandler GSoC issues
+      //ei.setArrayField(fieldName, (Array) newValue);
+    }
+  }
+
+  public void applyModifications() {
+    for(String fieldName : modifiedFields.keySet()) {
+      ModifiedFieldData fieldData = modifiedFields.get(fieldName);
+      applyFieldUpdate(fieldName,fieldData.targetObject, fieldData.newValue);
+    }
+
+    for(String staticFieldName : modifiedStaticFields.keySet()) {
+      ModifiedFieldData staticFieldData = modifiedStaticFields.get(staticFieldName);
+      ElementInfo targetClassObject = staticFieldData.classInfo.getModifiableClassObject();
+      applyFieldUpdate(staticFieldName, targetClassObject, staticFieldData.newValue);
+    }
+  }
+
+  public void addField(String fieldName, ElementInfo ei, Object newValue) {
+    modifiedFields.put(fieldName, new ModifiedFieldData(ei, newValue));
+  }
+
+
+  public void addStaticField(String fieldName, ClassInfo ci, Object newValue) {
+    modifiedStaticFields.put(fieldName, new ModifiedFieldData(ci, newValue));
+  }
+
   private class ModifiedFieldData {
     public ModifiedFieldData(ElementInfo ei, Object newValue) {
       targetObject = ei;
+      this.newValue = newValue;
+    }
+
+    // static field
+    public ModifiedFieldData(ClassInfo ci, Object newValue) {
+      classInfo = ci;
       this.newValue = newValue;
     }
 
