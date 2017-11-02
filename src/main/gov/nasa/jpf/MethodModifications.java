@@ -42,9 +42,77 @@ public class MethodModifications {
   }
 
   private Object[] params;
-  private HashMap<String,ModifiedFieldData> modifiedFields;
-  private HashMap<String,ModifiedFieldData> modifiedStaticFields;
+  private HashMap<Integer,ModifiedFieldData> modifiedFields;
+  private HashMap<Integer,ModifiedFieldData> modifiedStaticFields;
+  private Object returnValue;
 
+  private class ModifiedFieldData {
+    public ModifiedFieldData(String fieldName, ElementInfo ei, Object newValue) {
+      this.fieldName = fieldName;
+      targetObject = ei;
+      this.newValue = newValue;
+    }
+
+    // static field
+    public ModifiedFieldData(String fieldName, ClassInfo ci, Object newValue) {
+      this.fieldName = fieldName;
+      classInfo = ci;
+      this.newValue = newValue;
+    }
+
+    public String fieldName;
+    // for non-static fields
+    public ElementInfo targetObject;
+    public Object newValue;
+    // only needed/valid for Static fields
+    public ClassInfo classInfo;
+  }
+
+
+  @Override
+  public String toString() {
+    if(params.length == 0 && modifiedFields.size() == 0 && modifiedStaticFields.size() == 0) {
+      return "{}";
+    }
+    StringBuilder sb = new StringBuilder();
+    sb.append("{\"modsSize\":" + (1 + params.length + modifiedFields.size() + modifiedStaticFields.size()));
+    sb.append(", \"returnValue\":\"" + returnValue + "\"");
+    sb.append(", \"args\":[ ");
+    //sb.append("{args:[");
+    for(Object arg : params) {
+      if(arg != params[params.length-1]){
+        sb.append("\""+arg+"\",");
+      }else{
+        sb.append("\""+arg+"\"");
+      }
+    }
+    sb.append("], \"fields\":[ ");
+    for(ModifiedFieldData fieldData : modifiedFields.values()) {
+      sb.append("{\"fieldName\":\"" + fieldData.fieldName 
+        + "\", \"targetObject\":\"" + fieldData.targetObject 
+        + "\", \"value\":\"" + fieldData.newValue +"\"},");
+    }
+    sb.deleteCharAt(sb.length()-1);
+    sb.append("], \"staticFields\":[ ");
+
+    for(ModifiedFieldData fieldData : modifiedStaticFields.values()) {
+      sb.append("{\"fieldName\":\"" + fieldData.fieldName 
+        + "\", \"classInfo\":\"" + fieldData.classInfo 
+        + "\", \"value\":\"" + fieldData.newValue +"\"},");
+    }
+    sb.deleteCharAt(sb.length()-1);
+    sb.append("]}");
+    return sb.toString();
+  }
+
+  public void setReturnValue(Object returnValue) {
+    //System.out.println(returnValue);
+    this.returnValue = returnValue;
+  }
+
+  public Object getReturnValue() {
+    return returnValue;
+  } 
 
   public void applyFieldUpdate(String fieldName, ElementInfo ei, Object newValue) {
     // if reference object?
@@ -73,45 +141,24 @@ public class MethodModifications {
   }
 
   public void applyModifications() {
-    for(String fieldName : modifiedFields.keySet()) {
-      ModifiedFieldData fieldData = modifiedFields.get(fieldName);
-      applyFieldUpdate(fieldName,fieldData.targetObject, fieldData.newValue);
+    for(ModifiedFieldData fieldData : modifiedFields.values()) {
+      //System.out.println("updating " + fieldData.fieldName + " new value is " + fieldData.newValue);
+      applyFieldUpdate(fieldData.fieldName, fieldData.targetObject, fieldData.newValue);
     }
 
-    for(String staticFieldName : modifiedStaticFields.keySet()) {
-      ModifiedFieldData staticFieldData = modifiedStaticFields.get(staticFieldName);
+    for(ModifiedFieldData staticFieldData : modifiedStaticFields.values()) {
       ElementInfo targetClassObject = staticFieldData.classInfo.getModifiableClassObject();
-      applyFieldUpdate(staticFieldName, targetClassObject, staticFieldData.newValue);
+      applyFieldUpdate(staticFieldData.fieldName, targetClassObject, staticFieldData.newValue);
     }
   }
 
   public void addField(String fieldName, ElementInfo ei, Object newValue) {
-    modifiedFields.put(fieldName, new ModifiedFieldData(ei, newValue));
+    modifiedFields.put((fieldName.hashCode()+ei.hashCode()), new ModifiedFieldData(fieldName, ei, newValue));
   }
 
 
   public void addStaticField(String fieldName, ClassInfo ci, Object newValue) {
-    modifiedStaticFields.put(fieldName, new ModifiedFieldData(ci, newValue));
-  }
-
-  private class ModifiedFieldData {
-    public ModifiedFieldData(ElementInfo ei, Object newValue) {
-      targetObject = ei;
-      this.newValue = newValue;
-    }
-
-    // static field
-    public ModifiedFieldData(ClassInfo ci, Object newValue) {
-      classInfo = ci;
-      this.newValue = newValue;
-    }
-
-
-    // for non-static fields
-    public ElementInfo targetObject;
-    public Object newValue;
-    // only needed/valid for Static fields
-    public ClassInfo classInfo;
+    modifiedStaticFields.put((fieldName.hashCode()+ci.hashCode()), new ModifiedFieldData(fieldName, ci, newValue));
   }
 
 

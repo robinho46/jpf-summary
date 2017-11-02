@@ -31,6 +31,8 @@ import gov.nasa.jpf.jvm.bytecode.INVOKEINTERFACE;
 import gov.nasa.jpf.jvm.bytecode.EXECUTENATIVE;
 import gov.nasa.jpf.jvm.bytecode.JVMInvokeInstruction;
 import gov.nasa.jpf.jvm.bytecode.JVMReturnInstruction;
+import gov.nasa.jpf.jvm.bytecode.RETURN;
+import gov.nasa.jpf.jvm.bytecode.DIRECTCALLRETURN;
 import gov.nasa.jpf.jvm.bytecode.VirtualInvocation;
 import gov.nasa.jpf.search.Search;
 import gov.nasa.jpf.vm.ChoiceGenerator;
@@ -93,14 +95,16 @@ public class SummaryCreator extends ListenerAdapter {
     if (skipInit) {
       skip = true;
     }
-
+    //blackList.add("<init>");
+    //blackList.add("java.lang.String.hashCode()I");
+    //blackList.add("java.lang.Class.desiredAssertionStatus()Z");
     nativeWhiteList.add("desiredAssertionStatus");
     nativeWhiteList.add("println");
     nativeWhiteList.add("hashCode");
     nativeWhiteList.add("min");
     nativeWhiteList.add("max");
     // this might not be quite right
-    nativeWhiteList.add("forName");
+    //nativeWhiteList.add("forName");
 
     out = new PrintWriter(System.out, true);
   }
@@ -110,8 +114,11 @@ public class SummaryCreator extends ListenerAdapter {
       MethodCounter counter = counterMap.get(r);
       counter.interruptedByNativeCall = true; 
       counter.interruptingMethod = nativeMethodName;
+      //out.println("BLACKLISTED " + r);
       blackList.add(r);
     }
+
+
     recording = new HashSet<>();
   }
 
@@ -119,9 +126,11 @@ public class SummaryCreator extends ListenerAdapter {
     for(String r : recording) {
       MethodCounter counter = counterMap.get(r);
       counter.interruptedByTransition = true; 
+      //out.println("BLACKLISTED " + r);
 
       blackList.add(r);
     }
+
     recording = new HashSet<>();
   }
 
@@ -138,11 +147,11 @@ public class SummaryCreator extends ListenerAdapter {
   public void choiceGeneratorSet (VM vm, ChoiceGenerator<?> newCG) {
     resetRecording();
   }
- 
+
 
   @Override
   public void instructionExecuted (VM vm, ThreadInfo thread, Instruction nextInsn, Instruction executedInsn) {
-    ThreadInfo ti;
+    ThreadInfo ti = thread;
     MethodInfo mi = executedInsn.getMethodInfo();
 
     if (skip) {
@@ -154,7 +163,6 @@ public class SummaryCreator extends ListenerAdapter {
     }
     if (executedInsn instanceof JVMInvokeInstruction) {
       JVMInvokeInstruction call = (JVMInvokeInstruction)executedInsn;
-      ti = thread;
       mi = call.getInvokedMethod(ti);
       
       // this can apparently happen
@@ -166,9 +174,12 @@ public class SummaryCreator extends ListenerAdapter {
         return;
 
       String methodName = mi.getFullName();
-      if(blackList.contains(methodName)) {
-        return;
-      }
+      
+      // this probably needs to be a condition
+      // it doesn't seem reasonable to return the same
+      // object when we allocate a new instance
+      // it does however seem to work!
+      // mi.getName().equals("<init>") || 
 
       if(!counterMap.containsKey(methodName)) {
         counterMap.put(methodName, new MethodCounter(methodName));
@@ -176,42 +187,139 @@ public class SummaryCreator extends ListenerAdapter {
       counterMap.get(methodName).totalCalls++;
       counterMap.get(methodName).instructionCount = mi.getNumberOfInstructions();
 
+      // 2do TODO: This only works if we're sure that JPF creates objects
+      // once, and not several times during backtracking.
+      if(mi.getName().equals("<init>") || mi.getName().equals("<clinit>")) {
+        counterMap.get(methodName).isInit = true;
+        return;
+      }
+
+      // if(mi.getName().equals("desiredAssertionStatus") || mi.getName().equals("equalsIgnoreCase")) {
+      //   return;
+      // }
+      if(blackList.contains(methodName)) {
+        resetRecording(methodName);
+        return;
+      }
+
       if(!contextMap.containsKey(methodName)) {
         Object[] args = call.getArgumentValues(ti);
-        contextMap.put(methodName, new MethodContext(args));
+        if(executedInsn instanceof INVOKESTATIC) {
+          contextMap.put(methodName, new MethodContext(args));
+        }else{  
+          contextMap.put(methodName, new MethodContext(ti.getElementInfo(call.getLastObjRef()),args));
+        }
       }
       
       if(!modificationMap.containsKey(methodName)) {
+        //assert(mi.getArgumentsSize() == call.getArgumentValues(ti).length);
         modificationMap.put(methodName, new MethodModifications(call.getArgumentValues(ti)));
       }
 
       if(!recorded.contains(methodName)) {
+        //out.println("recording " + methodName);
+        //out.println("starting with " + executedInsn);
+        //out.println();
         recording.add(methodName);
       }else{
-        // method has been recorded, so summary exists
-        if(!contextMap.get(methodName).match(call.getArgumentValues(ti))) {
-          return;
+       
+
+
+        if(executedInsn instanceof INVOKESTATIC) {
+          if(!contextMap.get(methodName).match(call.getArgumentValues(ti))) {
+            //out.println("context mismatch " + methodName);
+            //out.println("context=" + contextMap.get(methodName));
+            //out.println();
+            return;
+          }
+        }else{
+          if(!contextMap.get(methodName).match(call.getArgumentValues(ti))) {
+
+          //if(!contextMap.get(methodName).match(ti.getElementInfo(call.getLastObjRef()),call.getArgumentValues(ti))) {
+            //out.println("context mismatch " + methodName);
+            //out.println("context=" + contextMap.get(methodName));
+            //out.println();
+            return;
+          }
         }
+        replacedCalls++;
+        counterMap.get(methodName).argsMatchCount++;
         modificationMap.get(methodName).applyModifications();
 
+        // find the return instruction
+        Instruction nextInstruction = ti.getPC();
+        assert(nextInstruction != null);
+        while(!(nextInstruction instanceof JVMReturnInstruction)){
+          assert(nextInstruction != null);
+          nextInstruction = nextInstruction.getNext();
+        }
+        
+        // no return value necessary
 
-        counterMap.get(methodName).argsMatchCount++;
-        replacedCalls++;
+/*
+        
+        
+        //out.println("applying summary of " + methodName);
+        //out.println("context=" + contextMap.get(methodName));
+        //out.println();
+        if(nextInstruction instanceof RETURN) {
+          out.println("applying summary for " + methodName);
+          out.println("context=" + contextMap.get(methodName));
+          Object returnValue = modificationMap.get(methodName).getReturnValue();
+          assert(returnValue == null);
+          ti.skipInstruction(nextInstruction);
+          return;
+        }
+        // prepare stack with correct return value
+        JVMReturnInstruction ret = (JVMReturnInstruction) nextInstruction;
+        StackFrame frame = ti.getModifiableTopFrame();
+        Object returnValue = modificationMap.get(methodName).getReturnValue();
+        if(!mi.getReturnType().equals("V")) {
+          if(returnValue instanceof Long) {
+            frame.pushLong((Long) returnValue);
+          } else if(returnValue instanceof Double) {
+            frame.pushDouble((Double) returnValue);
+          } else if(returnValue instanceof ElementInfo) {
+            frame.push(((ElementInfo) returnValue).getObjectRef());
+          } else {
+            if(returnValue == null){
+              //out.println(methodName);
+              frame.push(MJIEnv.NULL);
+            }else{
+              if(frame.getSlots().length == 0) {//
+                out.println(methodName);
+                out.println(contextMap.get(methodName));
+                out.println(ret);
+                out.println(returnValue);
+              }else{
+                frame.push((Integer) returnValue);
+              }
+            }
+          }
+        }
+        ti.skipInstruction(nextInstruction);*/
+
       }
+
+
+
+
     } else if (executedInsn instanceof JVMReturnInstruction) {
-      Instruction ret = executedInsn;
+      JVMReturnInstruction ret = (JVMReturnInstruction) executedInsn;
       mi = ret.getMethodInfo();
       String methodName = mi.getFullName();
       if(recording.contains(methodName)) {
         recorded.add(methodName);
+        modificationMap.get(methodName).setReturnValue(ret.getReturnValue(ti));
         counterMap.get(methodName).recorded = true;
-        recording = new HashSet<>();
+        recording.remove(methodName);
       }
     } else if(executedInsn instanceof EXECUTENATIVE) {
       String methodName = mi.getFullName();
-      // || mi.getName().equals("forName")
-      if(nativeWhiteList.contains(mi.getName()))
+      if(nativeWhiteList.contains(mi.getName())){
+        //out.println("CALLED WHITELISTED NATIVE FUNCTION " + mi.getFullName());
         return;
+      }
 
 
       resetRecording(methodName);
@@ -233,13 +341,14 @@ public class SummaryCreator extends ListenerAdapter {
         if(finsn instanceof GETFIELD) {
           // add to the methods above in the call-stack
           for(String stackMethodName : recording) {
-            if(contextMap.get(stackMethodName).containsField(finsn.getFieldName()))
+            if(!contextMap.get(stackMethodName).containsField(finsn.getFieldName(), ei)) {
               contextMap.get(stackMethodName).addField(finsn.getFieldName(), ei, ei.getFieldValueObject(fi.getName()));
+            }
           }
         }  else if (finsn instanceof GETSTATIC) {
           // add to the methods above in the call-stack
           for(String stackMethodName : recording) {
-            if(contextMap.get(stackMethodName).containsStaticField(finsn.getFieldName()))
+            if(!contextMap.get(stackMethodName).containsStaticField(finsn.getFieldName()))
               contextMap.get(stackMethodName).addStaticField(finsn.getFieldName(),fi.getClassInfo(),ei.getFieldValueObject(fi.getName()));
           }
         }
@@ -262,8 +371,6 @@ public class SummaryCreator extends ListenerAdapter {
           
         }
       }
-    } else {
-      // is other instruction
     }
   } 
 
@@ -292,57 +399,59 @@ public class SummaryCreator extends ListenerAdapter {
     lastMi = null;
   }
 
-  @Override
-  public void searchFinished(Search search) {
-    out.println("----------------------------------- search finished");
-    out.println();
+  public String nativeMethodList() {
+    StringBuilder nativeMethods = new StringBuilder();
 
-
-    int recordedMethods = 0;
-    int uniqueMethods = 0;
-    int savedInstructions = 0;
-    int missedInsnsNative = 0;
-    int transitionInterrupts = 0;
-    int nativeMethodInterrupts = 0;
-
-
-    out.println();
-    out.print("native-method-list:");
+    nativeMethods.append("{\"native-method-list\":[");
     for(String mName : counterMap.keySet()) {
       MethodCounter counter = counterMap.get(mName);
       if(!counter.interruptedByNativeCall) 
         continue;
 
-      out.print(counter.interruptingMethod + ",");
+      nativeMethods.append("\"" + counter.interruptingMethod + "\",");
     }
-    out.println();
 
+    nativeMethods.deleteCharAt(nativeMethods.length()-1);
+    nativeMethods.append("]}");
+    return nativeMethods.toString();
+  }
+
+  public String methodStatistics() {
+    int uniqueMethods = 0;
+    int recordedMethods = 0;
+    int initCount = 0;
+    int transitionInterrupts = 0;
+    int nativeMethodInterrupts = 0;
     StringBuilder methodStats = new StringBuilder();
-    methodStats.append("{methodStats:[");
+    methodStats.append("{\"methodStats\":[ ");
     for(String methodName : counterMap.keySet()) {
       MethodCounter counter = counterMap.get(methodName);
       MethodContext context = contextMap.get(methodName);
       uniqueMethods++;
       assert(counter != null);
-      if(!counter.recorded && !counter.interrupted()) {
-        // this shouldn't happen, but seems to be the case for some methods
-        // particularly <init>
+      if(!(counter.recorded || counter.interrupted())) {
+        initCount++;
+        assert(counter.isInit);
         continue;
       }
 
 
       assert(!(counter.interrupted() && counter.recorded));
-
-      if(counter.recorded ) {
+      if( counter.totalCalls-1 != 0 && (counter.recorded || counter.interruptedByNativeCall)) {
         methodStats.append(counter + ",");
+      }
+      if(counter.recorded ) {
         recordedMethods++;
-        savedInstructions += counter.instructionCount * (counter.totalCalls-1);
+        //savedInstructions += counter.instructionCount * (counter.totalCalls-1);
         //String contextString = context.toString();
-        /*
-        if(!contextString.equals("empty") && counter.totalCalls-1 != 0) {
-          out.println(methodName+".context = " + context );
+        
+        if( counter.totalCalls-1 != 0) {
+          out.println(methodName + "  context = " + context );
           out.println("matched " + counter.argsMatchCount + "/" + (counter.totalCalls-1) + " times");
-        }*/
+          out.println(methodName + "  mods = " + modificationMap.get(methodName) );
+          out.println();
+        }
+        
       }
 
       if(counter.interruptedByNativeCall){
@@ -351,25 +460,30 @@ public class SummaryCreator extends ListenerAdapter {
       if(counter.interruptedByTransition){
         transitionInterrupts++;
       }
-
-      //out.println();
     }
     methodStats.deleteCharAt(methodStats.length()-1);
     methodStats.append("]}");
-    out.println(methodStats.toString());
 
+    // out.println("We called " + uniqueMethods + " methods.");
+    // out.println(recordedMethods + " of these were recorded.");
+    // out.println(nativeMethodInterrupts + " were interrupted by Native Method Calls");
+    // out.println(transitionInterrupts + " were interrupted by Transitions");
+    // out.println(initCount + " were initialisation");
+    assert(uniqueMethods == (recordedMethods+nativeMethodInterrupts+transitionInterrupts+initCount));
+    return methodStats.toString();
+  }
 
-    out.println("replacedCalls " + replacedCalls);
-    out.println("Saved instructions (bad approximation) " + savedInstructions);
-    out.println();    
-    out.println("We called " + uniqueMethods + " methods.");
-    out.println(recordedMethods + " of these were recorded.");
-    out.println(nativeMethodInterrupts + " were interrupted by Native Method Calls");
-    out.println(transitionInterrupts + " were interrupted by Transitions");
-    
-
-    
+  @Override
+  public void searchFinished(Search search) {
+    out.println("----------------------------------- search finished");
     out.println();
+
+
+
+    //out.println(methodStatistics());
+    //out.println(nativeMethodList());
+
+    
 
   }
 

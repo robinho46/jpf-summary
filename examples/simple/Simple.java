@@ -40,22 +40,16 @@ public class Simple  {
     
     new Simple().doSomethingElse(5,true);
     x = 0;
-    write(37);
+    write(43);
       
-
-    if(x==42){
-      System.out.println("Didn't skip method.");
-    }else{
-      System.out.println("x="+x);
-    }
-
-    /*
+    
     for(int i=0; i < 4000; i++) {
       write(42);
     }
     for(int i=0; i < 4000; i++) {
+      x=0;
       write(43);
-    }*/
+    }
     read();
 
     Particular obj = new Particular(33);

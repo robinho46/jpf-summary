@@ -31,6 +31,7 @@ public class MethodCounter {
 
     interruptedByNativeCall = false;
     interruptedByTransition = false;
+    isInit = false;
     interruptingMethod = "";
 
   }
@@ -43,12 +44,16 @@ public class MethodCounter {
   public String toString() {
     String str = "{\"methodName\":\"" + methodName + "\"";
     str += ",\"totalCalls\":"+totalCalls;
+    str += ",\"argsMatchCount\":" + argsMatchCount;
     str += ",\"readCount\":"+readCount;
     str += ",\"writeCount\":"+writeCount;
     str += ",\"instructionCount\":" + instructionCount;
-    str += ",\"interruptedByNativeCall\":" + interruptedByNativeCall;
+    str += ",\"recorded\":"+recorded;
     str += ",\"interruptedByTransition\":" + interruptedByTransition;
-    str += ",\"argsMatchCount\":" + argsMatchCount;
+    str += ",\"interruptedByNativeCall\":" + interruptedByNativeCall;
+    if(interruptedByNativeCall)
+      str += ",\"interruptingMethod\":\"" + interruptingMethod + "\"";
+    //str += ",\"isInit\":" + isInit;
     str += "}";
     return str;
   }
@@ -87,6 +92,7 @@ public class MethodCounter {
   public boolean recorded; 
   public boolean interruptedByNativeCall;
   public boolean interruptedByTransition;
+  public boolean isInit;
   public String interruptingMethod;
 
   public int readCount;

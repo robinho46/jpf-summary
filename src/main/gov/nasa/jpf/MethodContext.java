@@ -35,7 +35,49 @@ import java.util.Set;
 import java.util.HashMap;
 import java.util.Iterator;
 public class MethodContext {
+
+  private Object[] params;
+  private ElementInfo _this;
+  // We need to track Objectref, FieldName, Type(?), Value 
+  private HashMap<Integer,DependentFieldData> dependentFields;
+  private HashMap<String,DependentFieldData> dependentStaticFields;
+
+  private class DependentFieldData {
+    public String fieldName;
+    // probably not be easily testable
+    // for non-static fields
+    public ElementInfo sourceObject;
+    public Object previousValue;
+    // only needed/valid for Static fields
+    public ClassInfo classInfo;
+
+    // for non-static fields
+    public DependentFieldData(String fieldName, ElementInfo ei, Object previousValue) {
+      this.fieldName = fieldName;
+      sourceObject = ei;
+      this.previousValue = previousValue;
+    }
+
+    // for static fields
+    public DependentFieldData(String fieldName, ClassInfo ci, Object previousValue) {
+      this.fieldName = fieldName;
+      classInfo = ci;
+      this.previousValue = previousValue;
+    }
+
+    public String toString() {
+      return sourceObject.toString() + " " + previousValue.toString();
+    }
+  }
+
   public MethodContext(Object[] args) {
+    params = args;
+    dependentFields = new HashMap<>();
+    dependentStaticFields = new HashMap<>();
+  }
+
+  public MethodContext(ElementInfo _this, Object[] args) {
+    this._this = _this;
     params = args;
     dependentFields = new HashMap<>();
     dependentStaticFields = new HashMap<>();
@@ -44,68 +86,95 @@ public class MethodContext {
   @Override
   public String toString() {
     if(params.length == 0 && dependentFields.size() == 0 && dependentStaticFields.size() == 0) {
-      return "empty";
+      return "{}";
     }
-
-    String res = "{contextSize:" + (params.length + dependentFields.size() + dependentStaticFields.size());
-    res+= ", args:[";
+    StringBuilder sb = new StringBuilder();
+    sb.append("{\"contextSize\":" + (1 + params.length + dependentFields.size() + dependentStaticFields.size()));
+    sb.append(", \"this\":\"" + _this + "\"");
+    sb.append(", \"args\":[ ");
     //sb.append("{args:[");
     for(Object arg : params) {
       if(arg != params[params.length-1]){
-        res += "\""+arg+"\",";
+        sb.append("\""+arg+"\",");
       }else{
-        res+= "\""+arg+"\"";
+        sb.append("\""+arg+"\"");
       }
     }
-    res += "], fields:[";
-    for(String fieldName : dependentFields.keySet()) {
-      DependentFieldData fieldData = dependentFields.get(fieldName);
-      res += "{\"" + fieldName + "\":\"" + fieldData.sourceObject + "=" + fieldData.previousValue +"\"},";
+    sb.append("], \"fields\":[ ");
+    for(DependentFieldData fieldData : dependentFields.values()) {
+      sb.append("{\"fieldName\":\"" + fieldData.fieldName 
+        + "\", \"sourceObject\":\"" + fieldData.sourceObject 
+        + "\", \"value\":\"" + fieldData.previousValue +"\"},");
     }
-    res += "], staticFields:[";
+    sb.deleteCharAt(sb.length()-1);
+    sb.append("], \"staticFields\":[ ");
 
     for(String fieldName : dependentStaticFields.keySet()) {
       DependentFieldData fieldData = dependentStaticFields.get(fieldName);
-      res += "{\"" + fieldName + "\":\"" + fieldData.classInfo + "=" + fieldData.previousValue +"\"},";
+      sb.append("{\"" + fieldName + "\":\"" + fieldData.classInfo + "=" + fieldData.previousValue +"\"},");
     }
-    res+= "]}";
-    return res;
+    sb.deleteCharAt(sb.length()-1);
+    sb.append("]}");
+    return sb.toString();
+  }
+  
+  public boolean match(ElementInfo _this, Object[] args) {
+    assert(this._this != null);
+    if(!this._this.equals(_this)){
+      System.out.println("this mismatch");
+      System.out.println(this._this + " != " + _this);
+      return false;
+    }
+
+    return match(args);
   }
 
   public boolean match(Object[] args) {
-    if(!argumentsMatch(args))
+
+    if(!argumentsMatch(args)) {
+      //System.out.println("args mismatch");
       return false;
+    }
 
     // at this point we know that the arguments match, 
     // so any field operations that access fields
     // of arguments are safe
-    if(!staticFieldsMatch())
+    if(!staticFieldsMatch()) {
+      //System.out.println("static fields mismatch");
       return false;
+    }
 
     // now both args and static fields are guaranteed to match
-    if(!fieldsMatch())
+    if(!fieldsMatch()) {
+      //System.out.println("fields mismatch");
       return false;
+    }
 
     return true;
   }
 
   private boolean valuesEqual(Object oldValue, Object currentValue) {
       if(oldValue == null) {
-        if(currentValue == null)
+        if(currentValue == null){
           return true;
-        else
+        }else{
           return false;
+        }
       }
 
       return oldValue.equals(currentValue);
   }
 
   private boolean fieldsMatch() {
-    for(String fieldName : dependentFields.keySet()) {
-      DependentFieldData fieldData = dependentFields.get(fieldName);
+    for(DependentFieldData fieldData : dependentFields.values()) {
       Object oldValue = fieldData.previousValue;
-      Object currentValue = fieldData.sourceObject.getFieldValueObject(fieldName);
-      if(!valuesEqual(oldValue,currentValue)) {
+      Object currentValue = fieldData.sourceObject.getFieldValueObject(fieldData.fieldName);
+      if(!valuesEqual(oldValue,currentValue)) {/*
+        System.out.println("fieldName="+fieldData.fieldName);
+        System.out.println("sourceObject="+fieldData.sourceObject);
+        System.out.println(oldValue + "!=" + currentValue);
+        System.out.println(oldValue == currentValue);
+        System.out.println(oldValue.equals(currentValue));*/
         return false;
       }
     }
@@ -114,6 +183,7 @@ public class MethodContext {
   }
 
   private boolean staticFieldsMatch() {
+    //assert(dependentStaticFields.isEmpty());
     for(String fieldName : dependentStaticFields.keySet()) {
       DependentFieldData fieldData = dependentStaticFields.get(fieldName);
       ClassInfo ci = fieldData.classInfo;
@@ -141,7 +211,7 @@ public class MethodContext {
     return true;
   }
 
-  public boolean containsField(String fieldName) {
+  public boolean containsField(String fieldName, ElementInfo source) {
     return dependentFields.containsKey(fieldName);
   }
 
@@ -150,46 +220,12 @@ public class MethodContext {
   }
 
   public void addField(String fieldName, ElementInfo source, Object value) {
-    dependentFields.put(fieldName, new DependentFieldData(source, value));
+    dependentFields.put((fieldName.hashCode()+source.hashCode()), new DependentFieldData(fieldName, source, value));
   }
 
   public void addStaticField(String fieldName, ClassInfo ci, Object value) {
-    dependentStaticFields.put(fieldName,new DependentFieldData(ci, value));
+    dependentStaticFields.put(fieldName, new DependentFieldData(fieldName, ci, value));
   }
 
 
-  private Object[] params;
-  // We need to track Objectref, FieldName, Type(?), Value 
-  private HashMap<String,DependentFieldData> dependentFields;
-  private HashMap<String,DependentFieldData> dependentStaticFields;
-
-  private class DependentFieldData {
-    public DependentFieldData(ElementInfo ei, Object previousValue) {
-      sourceObject = ei;
-      this.previousValue = previousValue;
-    }
-
-    // for static fields
-    public DependentFieldData(ClassInfo ci, Object previousValue) {
-      classInfo = ci;
-      this.previousValue = previousValue;
-    }
-
-    public String toString() {
-      return sourceObject.toString() + " " + previousValue.toString();
-    }
-
-    // This might be a mistake
-    // It will probably not be easily testable
-    // It will also reduce the applicability somewhat,
-    // as now we must ensure that it's the *same* object
-    // this means args must match exactly (including *this*).
-    //
-    // If it's a reference to a reference... We may have issues. We'll see
-    // for non-static fields
-    public ElementInfo sourceObject;
-    public Object previousValue;
-    // only needed/valid for Static fields
-    public ClassInfo classInfo;
-  }
 }
