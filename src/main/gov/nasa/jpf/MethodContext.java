@@ -120,9 +120,9 @@ public class MethodContext {
   
   public boolean match(ElementInfo _this, Object[] args) {
     assert(this._this != null);
-    if(!this._this.equals(_this)){
-      System.out.println("this mismatch");
-      System.out.println(this._this + " != " + _this);
+    if(this._this != _this){
+      //System.out.println("this mismatch");
+      //System.out.println(this._this + " != " + _this);
       return false;
     }
 
@@ -169,12 +169,12 @@ public class MethodContext {
     for(DependentFieldData fieldData : dependentFields.values()) {
       Object oldValue = fieldData.previousValue;
       Object currentValue = fieldData.sourceObject.getFieldValueObject(fieldData.fieldName);
-      if(!valuesEqual(oldValue,currentValue)) {/*
+      if(!valuesEqual(oldValue,currentValue)) {
         System.out.println("fieldName="+fieldData.fieldName);
         System.out.println("sourceObject="+fieldData.sourceObject);
         System.out.println(oldValue + "!=" + currentValue);
         System.out.println(oldValue == currentValue);
-        System.out.println(oldValue.equals(currentValue));*/
+        System.out.println(oldValue.equals(currentValue));
         return false;
       }
     }

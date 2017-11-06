@@ -31,6 +31,7 @@ import gov.nasa.jpf.jvm.bytecode.INVOKEINTERFACE;
 import gov.nasa.jpf.jvm.bytecode.EXECUTENATIVE;
 import gov.nasa.jpf.jvm.bytecode.JVMInvokeInstruction;
 import gov.nasa.jpf.jvm.bytecode.JVMReturnInstruction;
+import gov.nasa.jpf.jvm.bytecode.NATIVERETURN;
 import gov.nasa.jpf.jvm.bytecode.RETURN;
 import gov.nasa.jpf.jvm.bytecode.DIRECTCALLRETURN;
 import gov.nasa.jpf.jvm.bytecode.VirtualInvocation;
@@ -98,6 +99,9 @@ public class SummaryCreator extends ListenerAdapter {
     //blackList.add("<init>");
     //blackList.add("java.lang.String.hashCode()I");
     //blackList.add("java.lang.Class.desiredAssertionStatus()Z");
+    nativeWhiteList.add("append");
+    nativeWhiteList.add("toString");
+    nativeWhiteList.add("<init>");
     nativeWhiteList.add("desiredAssertionStatus");
     nativeWhiteList.add("println");
     nativeWhiteList.add("hashCode");
@@ -111,6 +115,10 @@ public class SummaryCreator extends ListenerAdapter {
 
   public void resetRecording(String nativeMethodName) {
     for(String r : recording) {
+      if(recorded.contains(r)) {
+        assert(false);
+      }
+
       MethodCounter counter = counterMap.get(r);
       counter.interruptedByNativeCall = true; 
       counter.interruptingMethod = nativeMethodName;
@@ -124,6 +132,9 @@ public class SummaryCreator extends ListenerAdapter {
 
   public void resetRecording() {
     for(String r : recording) {
+      if(recorded.contains(r)) {
+        assert(false);
+      }
       MethodCounter counter = counterMap.get(r);
       counter.interruptedByTransition = true; 
       //out.println("BLACKLISTED " + r);
@@ -187,12 +198,19 @@ public class SummaryCreator extends ListenerAdapter {
       counterMap.get(methodName).totalCalls++;
       counterMap.get(methodName).instructionCount = mi.getNumberOfInstructions();
 
+      if(methodName.equals("java.lang.StringBuilder.<init>()V") 
+          || methodName.equals("java.lang.StringBuilder.append(Ljava/lang/String;)Ljava/lang/StringBuilder;")) {
+        return;
+      }
+
+
       // 2do TODO: This only works if we're sure that JPF creates objects
       // once, and not several times during backtracking.
       if(mi.getName().equals("<init>") || mi.getName().equals("<clinit>")) {
         counterMap.get(methodName).isInit = true;
         return;
       }
+
 
       // if(mi.getName().equals("desiredAssertionStatus") || mi.getName().equals("equalsIgnoreCase")) {
       //   return;
@@ -233,9 +251,7 @@ public class SummaryCreator extends ListenerAdapter {
             return;
           }
         }else{
-          if(!contextMap.get(methodName).match(call.getArgumentValues(ti))) {
-
-          //if(!contextMap.get(methodName).match(ti.getElementInfo(call.getLastObjRef()),call.getArgumentValues(ti))) {
+          if(!contextMap.get(methodName).match(ti.getElementInfo(call.getLastObjRef()),call.getArgumentValues(ti))) {
             //out.println("context mismatch " + methodName);
             //out.println("context=" + contextMap.get(methodName));
             //out.println();
@@ -246,58 +262,57 @@ public class SummaryCreator extends ListenerAdapter {
         counterMap.get(methodName).argsMatchCount++;
         modificationMap.get(methodName).applyModifications();
 
-        // find the return instruction
-        Instruction nextInstruction = ti.getPC();
-        assert(nextInstruction != null);
-        while(!(nextInstruction instanceof JVMReturnInstruction)){
-          assert(nextInstruction != null);
-          nextInstruction = nextInstruction.getNext();
-        }
-        
-        // no return value necessary
 
-/*
-        
+        // find the return instruction
+        Instruction nextInstruction = mi.getInstruction(mi.getNumberOfInstructions()-1);
+        if(nextInstruction instanceof NATIVERETURN) {
+          return;
+        }
         
         //out.println("applying summary of " + methodName);
         //out.println("context=" + contextMap.get(methodName));
         //out.println();
+        // no return value necessary
         if(nextInstruction instanceof RETURN) {
-          out.println("applying summary for " + methodName);
-          out.println("context=" + contextMap.get(methodName));
+          //out.println("applying summary for " + methodName);
+          //out.println("context=" + contextMap.get(methodName));
+          //out.println();
+          StackFrame frame = ti.getModifiableTopFrame();
+          frame.removeArguments(mi);
           Object returnValue = modificationMap.get(methodName).getReturnValue();
           assert(returnValue == null);
           ti.skipInstruction(nextInstruction);
           return;
         }
+
         // prepare stack with correct return value
         JVMReturnInstruction ret = (JVMReturnInstruction) nextInstruction;
         StackFrame frame = ti.getModifiableTopFrame();
         Object returnValue = modificationMap.get(methodName).getReturnValue();
-        if(!mi.getReturnType().equals("V")) {
-          if(returnValue instanceof Long) {
-            frame.pushLong((Long) returnValue);
-          } else if(returnValue instanceof Double) {
-            frame.pushDouble((Double) returnValue);
-          } else if(returnValue instanceof ElementInfo) {
-            frame.push(((ElementInfo) returnValue).getObjectRef());
-          } else {
-            if(returnValue == null){
-              //out.println(methodName);
-              frame.push(MJIEnv.NULL);
+        if(returnValue instanceof Long) {
+          frame.pushLong((Long) returnValue);
+        } else if(returnValue instanceof Double) {
+          frame.pushDouble((Double) returnValue);
+        } else if(returnValue instanceof ElementInfo) {
+          frame.push(((ElementInfo) returnValue).getObjectRef());
+        } else {
+          if(returnValue == null){
+            //out.println(methodName);
+            frame.push(MJIEnv.NULL);
+          }else{
+            if(frame.getSlots().length == 0) {//
+              out.println(methodName);
+              out.println(contextMap.get(methodName));
+              out.println(ret);
+              out.println(returnValue);
             }else{
-              if(frame.getSlots().length == 0) {//
-                out.println(methodName);
-                out.println(contextMap.get(methodName));
-                out.println(ret);
-                out.println(returnValue);
-              }else{
-                frame.push((Integer) returnValue);
-              }
+              frame.push((Integer) returnValue);
             }
           }
         }
-        ti.skipInstruction(nextInstruction);*/
+
+        //out.println("Skipping to " + nextInstruction);
+        ti.skipInstruction(nextInstruction);
 
       }
 
@@ -431,7 +446,7 @@ public class SummaryCreator extends ListenerAdapter {
       assert(counter != null);
       if(!(counter.recorded || counter.interrupted())) {
         initCount++;
-        assert(counter.isInit);
+        //assert(counter.isInit);
         continue;
       }
 
@@ -480,8 +495,8 @@ public class SummaryCreator extends ListenerAdapter {
 
 
 
-    //out.println(methodStatistics());
-    //out.println(nativeMethodList());
+    out.println(methodStatistics());
+    out.println(nativeMethodList());
 
     
 
