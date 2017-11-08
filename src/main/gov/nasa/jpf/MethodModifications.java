@@ -117,6 +117,7 @@ public class MethodModifications {
   public void applyFieldUpdate(String fieldName, ElementInfo ei, Object newValue) {
     // if reference object?
 
+    System.out.println("Setting " + ei + "." + fieldName + " to " + newValue);
     // basic types
     if(ei.instanceOf("I")) {
       ei.setIntField(fieldName, (Integer) newValue);

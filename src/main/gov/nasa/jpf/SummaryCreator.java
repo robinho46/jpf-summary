@@ -73,7 +73,6 @@ public class SummaryCreator extends ListenerAdapter {
   static HashSet<String> nativeWhiteList = new HashSet<>();
 
 
-
   int replacedCalls = 0;
 
 
@@ -96,13 +95,18 @@ public class SummaryCreator extends ListenerAdapter {
     if (skipInit) {
       skip = true;
     }
+
+    blackList.add("hasNext()");
     //blackList.add("<init>");
     //blackList.add("java.lang.String.hashCode()I");
     //blackList.add("java.lang.Class.desiredAssertionStatus()Z");
+
+    // Todo add classnames here
     nativeWhiteList.add("append");
     nativeWhiteList.add("toString");
     nativeWhiteList.add("<init>");
     nativeWhiteList.add("desiredAssertionStatus");
+    nativeWhiteList.add("print");
     nativeWhiteList.add("println");
     nativeWhiteList.add("hashCode");
     nativeWhiteList.add("min");
@@ -160,6 +164,14 @@ public class SummaryCreator extends ListenerAdapter {
   }
 
 
+  @Override 
+  public void executeInstruction(VM vm, ThreadInfo currentThread, Instruction instructionToExecute) {
+
+    if (instructionToExecute instanceof JVMInvokeInstruction) {
+      //out.println("executing " + instructionToExecute);
+    }
+  }
+
   @Override
   public void instructionExecuted (VM vm, ThreadInfo thread, Instruction nextInsn, Instruction executedInsn) {
     ThreadInfo ti = thread;
@@ -197,9 +209,9 @@ public class SummaryCreator extends ListenerAdapter {
       }
       counterMap.get(methodName).totalCalls++;
       counterMap.get(methodName).instructionCount = mi.getNumberOfInstructions();
-
-      if(methodName.equals("java.lang.StringBuilder.<init>()V") 
-          || methodName.equals("java.lang.StringBuilder.append(Ljava/lang/String;)Ljava/lang/StringBuilder;")) {
+//methodName.equals("java.lang.StringBuilder.<init>()V") 
+    //      || 
+      if(methodName.equals("java.lang.StringBuilder.append(Ljava/lang/String;)Ljava/lang/StringBuilder;")) {
         return;
       }
 
@@ -251,6 +263,7 @@ public class SummaryCreator extends ListenerAdapter {
             return;
           }
         }else{
+          out.println("Matching context " + methodName + " " + contextMap.get(methodName));
           if(!contextMap.get(methodName).match(ti.getElementInfo(call.getLastObjRef()),call.getArgumentValues(ti))) {
             //out.println("context mismatch " + methodName);
             //out.println("context=" + contextMap.get(methodName));
@@ -269,9 +282,10 @@ public class SummaryCreator extends ListenerAdapter {
           return;
         }
         
-        //out.println("applying summary of " + methodName);
-        //out.println("context=" + contextMap.get(methodName));
-        //out.println();
+        out.println("applying summary of " + methodName);
+        out.println("context=" + contextMap.get(methodName));
+        
+        out.println();
         // no return value necessary
         if(nextInstruction instanceof RETURN) {
           //out.println("applying summary for " + methodName);
@@ -284,6 +298,7 @@ public class SummaryCreator extends ListenerAdapter {
           ti.skipInstruction(nextInstruction);
           return;
         }
+        
 
         // prepare stack with correct return value
         JVMReturnInstruction ret = (JVMReturnInstruction) nextInstruction;

@@ -85,7 +85,7 @@ public class MethodContext {
 
   @Override
   public String toString() {
-    if(params.length == 0 && dependentFields.size() == 0 && dependentStaticFields.size() == 0) {
+    if(params.length == 0 && dependentFields.size() == 0 && dependentStaticFields.size() == 0 && _this == null) {
       return "{}";
     }
     StringBuilder sb = new StringBuilder();
@@ -111,7 +111,9 @@ public class MethodContext {
 
     for(String fieldName : dependentStaticFields.keySet()) {
       DependentFieldData fieldData = dependentStaticFields.get(fieldName);
-      sb.append("{\"" + fieldName + "\":\"" + fieldData.classInfo + "=" + fieldData.previousValue +"\"},");
+      sb.append("{\"fieldName\":\"" + fieldData.fieldName
+        + "\", \"classInfo\":\"" + fieldData.classInfo 
+        + "\", \"value\":\"" + fieldData.previousValue +"\"},");
     }
     sb.deleteCharAt(sb.length()-1);
     sb.append("]}");
@@ -120,7 +122,7 @@ public class MethodContext {
   
   public boolean match(ElementInfo _this, Object[] args) {
     assert(this._this != null);
-    if(this._this != _this){
+    if(this._this != _this || !this._this.equals(_this)){
       //System.out.println("this mismatch");
       //System.out.println(this._this + " != " + _this);
       return false;
@@ -150,6 +152,7 @@ public class MethodContext {
       return false;
     }
 
+
     return true;
   }
 
@@ -162,6 +165,13 @@ public class MethodContext {
         }
       }
 
+      System.out.println("Comparing " + oldValue + " ~=~ " + currentValue);
+      if(oldValue instanceof ElementInfo) {
+        ElementInfo old = (ElementInfo) oldValue;
+        ElementInfo curr = (ElementInfo) currentValue;
+
+      }
+
       return oldValue.equals(currentValue);
   }
 
@@ -169,14 +179,20 @@ public class MethodContext {
     for(DependentFieldData fieldData : dependentFields.values()) {
       Object oldValue = fieldData.previousValue;
       Object currentValue = fieldData.sourceObject.getFieldValueObject(fieldData.fieldName);
-      if(!valuesEqual(oldValue,currentValue)) {
+      System.out.println("BEFORE COMPARING");
+      if(!valuesEqual(oldValue,currentValue)) {/*
         System.out.println("fieldName="+fieldData.fieldName);
         System.out.println("sourceObject="+fieldData.sourceObject);
         System.out.println(oldValue + "!=" + currentValue);
         System.out.println(oldValue == currentValue);
-        System.out.println(oldValue.equals(currentValue));
+        System.out.println(oldValue.equals(currentValue));*/
+        System.out.println("false");
+        System.out.println();
         return false;
       }
+      System.out.println("true");
+      System.out.println();
+
     }
 
     return true;

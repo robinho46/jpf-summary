@@ -8,7 +8,7 @@ public class IntegerExample {
     int i = 100;
     int y = 500;
     while(i-- != 0) {
-      //System.out.println("Simulate work " + i);
+      System.out.println("Simulate work " + i);
       y += 47;
       y *= 22;
       y--;
@@ -26,7 +26,7 @@ public class IntegerExample {
     IntegerExample ex = new IntegerExample();
     assert(ex.getXPlusFive() == 5);
 
-    for(int i=0;i<10000; i++) {
+    for(int i=0;i<100; i++) {
       assert(ex.getXPlusFive() == 5);
     }
     ex.incrementX();
