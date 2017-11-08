@@ -83,42 +83,27 @@ public class MethodContext {
     dependentStaticFields = new HashMap<>();
   }
 
-  @Override
-  public String toString() {
-    if(params.length == 0 && dependentFields.size() == 0 && dependentStaticFields.size() == 0 && _this == null) {
-      return "{}";
-    }
-    StringBuilder sb = new StringBuilder();
-    sb.append("{\"contextSize\":" + (1 + params.length + dependentFields.size() + dependentStaticFields.size()));
-    sb.append(", \"this\":\"" + _this + "\"");
-    sb.append(", \"args\":[ ");
-    //sb.append("{args:[");
-    for(Object arg : params) {
-      if(arg != params[params.length-1]){
-        sb.append("\""+arg+"\",");
-      }else{
-        sb.append("\""+arg+"\"");
-      }
-    }
-    sb.append("], \"fields\":[ ");
-    for(DependentFieldData fieldData : dependentFields.values()) {
-      sb.append("{\"fieldName\":\"" + fieldData.fieldName 
-        + "\", \"sourceObject\":\"" + fieldData.sourceObject 
-        + "\", \"value\":\"" + fieldData.previousValue +"\"},");
-    }
-    sb.deleteCharAt(sb.length()-1);
-    sb.append("], \"staticFields\":[ ");
+  /**
+    * Takes another context and adds all fields from that to itself.
+    * Needed when a summary is applied during recording.
+    * TODO: Resolve conflicts between contexts.
+    * TODO: Add *this* from inner as well, as a field?
+    **/
+  public void addContextFields(MethodContext innerContext) {
+    HashMap<Integer,DependentFieldData> innerFields = innerContext.getDependentFields();
+    HashMap<String,DependentFieldData> innerStaticFields = innerContext.getDependentStaticFields();
 
-    for(String fieldName : dependentStaticFields.keySet()) {
-      DependentFieldData fieldData = dependentStaticFields.get(fieldName);
-      sb.append("{\"fieldName\":\"" + fieldData.fieldName
-        + "\", \"classInfo\":\"" + fieldData.classInfo 
-        + "\", \"value\":\"" + fieldData.previousValue +"\"},");
+    for (Integer fieldHash : innerFields.keySet()) {
+      DependentFieldData fieldData = innerFields.get(fieldHash);
+      this.dependentFields.put(fieldHash, fieldData);
     }
-    sb.deleteCharAt(sb.length()-1);
-    sb.append("]}");
-    return sb.toString();
+
+    for (String fieldName : innerStaticFields.keySet()) {
+      DependentFieldData fieldData = innerStaticFields.get(fieldName);
+      this.dependentStaticFields.put(fieldName, fieldData);
+    }
   }
+
   
   public boolean match(ElementInfo _this, Object[] args) {
     assert(this._this != null);
@@ -165,7 +150,6 @@ public class MethodContext {
         }
       }
 
-      System.out.println("Comparing " + oldValue + " ~=~ " + currentValue);
       if(oldValue instanceof ElementInfo) {
         ElementInfo old = (ElementInfo) oldValue;
         ElementInfo curr = (ElementInfo) currentValue;
@@ -179,20 +163,14 @@ public class MethodContext {
     for(DependentFieldData fieldData : dependentFields.values()) {
       Object oldValue = fieldData.previousValue;
       Object currentValue = fieldData.sourceObject.getFieldValueObject(fieldData.fieldName);
-      System.out.println("BEFORE COMPARING");
       if(!valuesEqual(oldValue,currentValue)) {/*
         System.out.println("fieldName="+fieldData.fieldName);
         System.out.println("sourceObject="+fieldData.sourceObject);
         System.out.println(oldValue + "!=" + currentValue);
         System.out.println(oldValue == currentValue);
         System.out.println(oldValue.equals(currentValue));*/
-        System.out.println("false");
-        System.out.println();
         return false;
       }
-      System.out.println("true");
-      System.out.println();
-
     }
 
     return true;
@@ -243,5 +221,50 @@ public class MethodContext {
     dependentStaticFields.put(fieldName, new DependentFieldData(fieldName, ci, value));
   }
 
+  public HashMap<Integer,DependentFieldData> getDependentFields() {
+    return dependentFields;
+  }
+
+  public HashMap<String,DependentFieldData> getDependentStaticFields() {
+    return dependentStaticFields;
+  }
+
+
+  @Override
+  public String toString() {
+    if(params.length == 0 && dependentFields.size() == 0 && dependentStaticFields.size() == 0 && _this == null) {
+      return "{}";
+    }
+    StringBuilder sb = new StringBuilder();
+    sb.append("{\"contextSize\":" + (1 + params.length + dependentFields.size() + dependentStaticFields.size()));
+    sb.append(", \"this\":\"" + _this + "\"");
+    sb.append(", \"args\":[ ");
+    //sb.append("{args:[");
+    for(Object arg : params) {
+      if(arg != params[params.length-1]){
+        sb.append("\""+arg+"\",");
+      }else{
+        sb.append("\""+arg+"\"");
+      }
+    }
+    sb.append("], \"fields\":[ ");
+    for(DependentFieldData fieldData : dependentFields.values()) {
+      sb.append("{\"fieldName\":\"" + fieldData.fieldName 
+        + "\", \"sourceObject\":\"" + fieldData.sourceObject 
+        + "\", \"value\":\"" + fieldData.previousValue +"\"},");
+    }
+    sb.deleteCharAt(sb.length()-1);
+    sb.append("], \"staticFields\":[ ");
+
+    for(String fieldName : dependentStaticFields.keySet()) {
+      DependentFieldData fieldData = dependentStaticFields.get(fieldName);
+      sb.append("{\"fieldName\":\"" + fieldData.fieldName
+        + "\", \"classInfo\":\"" + fieldData.classInfo 
+        + "\", \"value\":\"" + fieldData.previousValue +"\"},");
+    }
+    sb.deleteCharAt(sb.length()-1);
+    sb.append("]}");
+    return sb.toString();
+  }
 
 }

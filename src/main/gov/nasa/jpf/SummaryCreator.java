@@ -252,25 +252,33 @@ public class SummaryCreator extends ListenerAdapter {
         //out.println();
         recording.add(methodName);
       }else{
-       
+        MethodContext currentContext =  contextMap.get(methodName);
 
 
         if(executedInsn instanceof INVOKESTATIC) {
-          if(!contextMap.get(methodName).match(call.getArgumentValues(ti))) {
+          if(!currentContext.match(call.getArgumentValues(ti))) {
             //out.println("context mismatch " + methodName);
             //out.println("context=" + contextMap.get(methodName));
             //out.println();
             return;
           }
         }else{
-          out.println("Matching context " + methodName + " " + contextMap.get(methodName));
-          if(!contextMap.get(methodName).match(ti.getElementInfo(call.getLastObjRef()),call.getArgumentValues(ti))) {
+          //out.println("Matching context " + methodName + " " + contextMap.get(methodName));
+          if(!currentContext.match(ti.getElementInfo(call.getLastObjRef()),call.getArgumentValues(ti))) {
             //out.println("context mismatch " + methodName);
             //out.println("context=" + contextMap.get(methodName));
             //out.println();
             return;
           }
         }
+
+        // NOTE: We need to ensure that context information
+        // propagates down to other methods that might be recorded
+        for(String r : recording) {
+          contextMap.get(r).addContextFields(currentContext);
+        }
+
+
         replacedCalls++;
         counterMap.get(methodName).argsMatchCount++;
         modificationMap.get(methodName).applyModifications();
@@ -282,10 +290,10 @@ public class SummaryCreator extends ListenerAdapter {
           return;
         }
         
-        out.println("applying summary of " + methodName);
-        out.println("context=" + contextMap.get(methodName));
+        //out.println("applying summary of " + methodName);
+        //out.println("context=" + contextMap.get(methodName));
         
-        out.println();
+        //out.println();
         // no return value necessary
         if(nextInstruction instanceof RETURN) {
           //out.println("applying summary for " + methodName);
