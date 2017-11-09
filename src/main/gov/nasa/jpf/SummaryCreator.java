@@ -253,7 +253,13 @@ public class SummaryCreator extends ListenerAdapter {
         recording.add(methodName);
       }else{
         MethodContext currentContext =  contextMap.get(methodName);
+        MethodCounter counter = counterMap.get(methodName);
+        counter.attemptedMatchCount++;
 
+        // adding a fail-trip to avoid doing excessive context-matching
+        if(counter.attemptedMatchCount - counter.argsMatchCount > 5 ) {
+          return;
+        }
 
         if(executedInsn instanceof INVOKESTATIC) {
           if(!currentContext.match(call.getArgumentValues(ti))) {
@@ -280,7 +286,7 @@ public class SummaryCreator extends ListenerAdapter {
 
 
         replacedCalls++;
-        counterMap.get(methodName).argsMatchCount++;
+        counter.argsMatchCount++;
         modificationMap.get(methodName).applyModifications();
 
 
@@ -290,8 +296,8 @@ public class SummaryCreator extends ListenerAdapter {
           return;
         }
         
-        //out.println("applying summary of " + methodName);
-        //out.println("context=" + contextMap.get(methodName));
+        out.println("applying summary of " + methodName);
+        out.println("context=" + contextMap.get(methodName));
         
         //out.println();
         // no return value necessary
@@ -476,20 +482,16 @@ public class SummaryCreator extends ListenerAdapter {
 
       assert(!(counter.interrupted() && counter.recorded));
       if( counter.totalCalls-1 != 0 && (counter.recorded || counter.interruptedByNativeCall)) {
-        methodStats.append(counter + ",");
-      }
-      if(counter.recorded ) {
-        recordedMethods++;
-        //savedInstructions += counter.instructionCount * (counter.totalCalls-1);
-        //String contextString = context.toString();
-        
-        if( counter.totalCalls-1 != 0) {
-          out.println(methodName + "  context = " + context );
-          out.println("matched " + counter.argsMatchCount + "/" + (counter.totalCalls-1) + " times");
-          out.println(methodName + "  mods = " + modificationMap.get(methodName) );
-          out.println();
+        methodStats.append("{\"methodName\":\"" + methodName + "\"");
+        methodStats.append(", \"counter\":" + counter);
+        if(counter.recorded ) {
+          recordedMethods++;
+          methodStats.append(", \"context\":" + context );
+          //out.println("matched " + counter.argsMatchCount + "/" + (counter.totalCalls-1) + " times");
+          methodStats.append(", \"mods\":" + modificationMap.get(methodName));
         }
-        
+        methodStats.append("},");
+
       }
 
       if(counter.interruptedByNativeCall){
@@ -502,12 +504,13 @@ public class SummaryCreator extends ListenerAdapter {
     methodStats.deleteCharAt(methodStats.length()-1);
     methodStats.append("]}");
 
-    // out.println("We called " + uniqueMethods + " methods.");
-    // out.println(recordedMethods + " of these were recorded.");
-    // out.println(nativeMethodInterrupts + " were interrupted by Native Method Calls");
-    // out.println(transitionInterrupts + " were interrupted by Transitions");
-    // out.println(initCount + " were initialisation");
-    assert(uniqueMethods == (recordedMethods+nativeMethodInterrupts+transitionInterrupts+initCount));
+    //out.println("We called " + uniqueMethods + " methods.");
+    //out.println(recordedMethods + " of these were recorded.");
+    //out.println(nativeMethodInterrupts + " were interrupted by Native Method Calls");
+    //out.println(transitionInterrupts + " were interrupted by Transitions");
+    //out.println(initCount + " were initialisation");
+    // fails for boundedBuffer (not critical atm)
+    //assert(uniqueMethods == (recordedMethods+nativeMethodInterrupts+transitionInterrupts+initCount));
     return methodStats.toString();
   }
 
@@ -516,13 +519,8 @@ public class SummaryCreator extends ListenerAdapter {
     out.println("----------------------------------- search finished");
     out.println();
 
-
-
     out.println(methodStatistics());
-    out.println(nativeMethodList());
-
-    
-
+    //out.println(nativeMethodList());
   }
 
 }

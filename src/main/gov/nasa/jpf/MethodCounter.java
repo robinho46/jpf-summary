@@ -28,6 +28,7 @@ public class MethodCounter {
     writeCount = 0;
     instructionCount = 0;
     argsMatchCount = 0;
+    attemptedMatchCount = 0;
 
     interruptedByNativeCall = false;
     interruptedByTransition = false;
@@ -45,8 +46,8 @@ public class MethodCounter {
     String str = "{\"methodName\":\"" + methodName + "\"";
     str += ",\"totalCalls\":"+totalCalls;
     str += ",\"argsMatchCount\":" + argsMatchCount;
-    str += ",\"readCount\":"+readCount;
-    str += ",\"writeCount\":"+writeCount;
+    //str += ",\"readCount\":"+readCount;
+    //str += ",\"writeCount\":"+writeCount;
     str += ",\"instructionCount\":" + instructionCount;
     str += ",\"recorded\":"+recorded;
     str += ",\"interruptedByTransition\":" + interruptedByTransition;
@@ -101,4 +102,5 @@ public class MethodCounter {
 
 
   public int argsMatchCount;
+  public int attemptedMatchCount;
 }

@@ -71,7 +71,8 @@ public class MethodModifications {
 
   @Override
   public String toString() {
-    if(params.length == 0 && modifiedFields.size() == 0 && modifiedStaticFields.size() == 0) {
+    // TODO: Distinguish between actually returning null, and void method
+    if(params.length == 0 && modifiedFields.size() == 0 && modifiedStaticFields.size() == 0 && returnValue == null) {
       return "{}";
     }
     StringBuilder sb = new StringBuilder();
