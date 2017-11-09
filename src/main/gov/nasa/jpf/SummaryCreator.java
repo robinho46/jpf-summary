@@ -104,7 +104,6 @@ public class SummaryCreator extends ListenerAdapter {
     // Todo add classnames here
     nativeWhiteList.add("append");
     nativeWhiteList.add("toString");
-    nativeWhiteList.add("<init>");
     nativeWhiteList.add("desiredAssertionStatus");
     nativeWhiteList.add("print");
     nativeWhiteList.add("println");
@@ -209,24 +208,18 @@ public class SummaryCreator extends ListenerAdapter {
       }
       counterMap.get(methodName).totalCalls++;
       counterMap.get(methodName).instructionCount = mi.getNumberOfInstructions();
-//methodName.equals("java.lang.StringBuilder.<init>()V") 
-    //      || 
+
+
       if(methodName.equals("java.lang.StringBuilder.append(Ljava/lang/String;)Ljava/lang/StringBuilder;")) {
         return;
       }
 
-
-      // 2do TODO: This only works if we're sure that JPF creates objects
-      // once, and not several times during backtracking.
       if(mi.getName().equals("<init>") || mi.getName().equals("<clinit>")) {
-        counterMap.get(methodName).isInit = true;
+        //counterMap.get(methodName).isInit = true;
+        resetRecording("<init>");
         return;
       }
 
-
-      // if(mi.getName().equals("desiredAssertionStatus") || mi.getName().equals("equalsIgnoreCase")) {
-      //   return;
-      // }
       if(blackList.contains(methodName)) {
         resetRecording(methodName);
         return;
@@ -296,8 +289,8 @@ public class SummaryCreator extends ListenerAdapter {
           return;
         }
         
-        out.println("applying summary of " + methodName);
-        out.println("context=" + contextMap.get(methodName));
+        //out.println("applying summary of " + methodName);
+        //out.println("context=" + contextMap.get(methodName));
         
         //out.println();
         // no return value necessary
