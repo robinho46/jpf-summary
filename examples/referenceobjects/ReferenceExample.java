@@ -42,25 +42,13 @@ public class ReferenceExample {
 
 
   public static void main(String[] args) {
-    ReferenceExample ref = new ReferenceExample();/*
+    ReferenceExample ref = new ReferenceExample();
     ref.addToList();
     ref.assertCorrectness(0);
     ref.setAllInList(42);
     ref.assertCorrectness(42);
     ref.addToList();
     ref.setAllInList(42);
-    ref.assertCorrectness(42);*/
-    ref.addToList();
-    ref.addToList();
-    ref.assertCorrectness(0);
-    ref.addToList();
-    ref.assertCorrectness(0);
     ref.assertCorrectness(42);
-    ref.setAllInList(4);
-    ref.assertCorrectness(4);
-
-
-
-
   }
 }
