@@ -40,6 +40,7 @@ import gov.nasa.jpf.vm.ChoiceGenerator;
 import gov.nasa.jpf.vm.MJIEnv;
 import gov.nasa.jpf.vm.VM;
 import gov.nasa.jpf.vm.StackFrame;
+import gov.nasa.jpf.vm.Types;
 import gov.nasa.jpf.vm.MethodInfo;
 import gov.nasa.jpf.vm.ThreadInfo;
 import gov.nasa.jpf.vm.ElementInfo;
@@ -152,7 +153,7 @@ public class SummaryCreator extends ListenerAdapter {
   public void threadInterrupted(VM vm, ThreadInfo interruptedThread) {
     resetRecording();
   }
-
+/*
   @Override
   public void choiceGeneratorRegistered (VM vm, ChoiceGenerator<?> nextCG, ThreadInfo currentThread, Instruction executedInstruction) {
     resetRecording();
@@ -161,7 +162,7 @@ public class SummaryCreator extends ListenerAdapter {
   public void choiceGeneratorSet (VM vm, ChoiceGenerator<?> newCG) {
     resetRecording();
   }
-
+*/
 
   @Override 
   public void executeInstruction(VM vm, ThreadInfo currentThread, Instruction instructionToExecute) {
@@ -209,6 +210,11 @@ public class SummaryCreator extends ListenerAdapter {
       counterMap.get(methodName).totalCalls++;
       counterMap.get(methodName).instructionCount = mi.getNumberOfInstructions();
 
+      // this is causing issues atm
+      if(mi.getReturnTypeCode() == Types.T_ARRAY) {
+        resetRecording("array type");
+        return;
+      }
 
       if(methodName.equals("java.lang.StringBuilder.append(Ljava/lang/String;)Ljava/lang/StringBuilder;")) {
         return;
@@ -288,10 +294,12 @@ public class SummaryCreator extends ListenerAdapter {
         if(nextInstruction instanceof NATIVERETURN) {
           return;
         }
-        
+       
         //out.println("applying summary of " + methodName);
         //out.println("context=" + contextMap.get(methodName));
-        
+        //out.println("mods=" + modificationMap.get(methodName));
+        //out.println();
+
         //out.println();
         // no return value necessary
         if(nextInstruction instanceof RETURN) {
