@@ -249,8 +249,8 @@ public class MethodContext {
     }
     sb.append("], \"fields\":[ ");
     for(DependentFieldData fieldData : dependentFields.values()) {
-      sb.append("{\"fieldName\":\"" + fieldData.fieldName 
-        + "\", \"sourceObject\":\"" + fieldData.sourceObject 
+      sb.append("{\"sourceObject\":\"" + fieldData.sourceObject 
+        + "\", \"fieldName\":\"" + fieldData.fieldName 
         + "\", \"value\":\"" + fieldData.previousValue +"\"},");
     }
     sb.deleteCharAt(sb.length()-1);
