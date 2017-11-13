@@ -47,20 +47,23 @@ public class MethodModifications {
   private Object returnValue;
 
   private class ModifiedFieldData {
-    public ModifiedFieldData(String fieldName, ElementInfo ei, Object newValue) {
+    public ModifiedFieldData(String fieldName, String type, ElementInfo ei, Object newValue) {
       this.fieldName = fieldName;
+      this.type = type;
       targetObject = ei;
       this.newValue = newValue;
     }
 
     // static field
-    public ModifiedFieldData(String fieldName, ClassInfo ci, Object newValue) {
+    public ModifiedFieldData(String fieldName, String type, ClassInfo ci, Object newValue) {
       this.fieldName = fieldName;
+      this.type = type;
       classInfo = ci;
       this.newValue = newValue;
     }
 
     public String fieldName;
+    public String type;
     // for non-static fields
     public ElementInfo targetObject;
     public Object newValue;
@@ -115,28 +118,30 @@ public class MethodModifications {
     return returnValue;
   } 
 
-  public void applyFieldUpdate(String fieldName, ElementInfo ei, Object newValue) {
+  public void applyFieldUpdate(String fieldName, String type, ElementInfo ei, Object newValue) {
     // if reference object?
 
     //System.out.println("Setting " + ei + "." + fieldName + " to " + newValue);
+
     // basic types
-    if(ei.instanceOf("I")) {
+    if(type.equals("int")) {
       ei.setIntField(fieldName, (Integer) newValue);
-    } else if(ei.instanceOf("F")) {
+      System.out.println(ei.getIntField(fieldName));
+    } else if(type.equals("float")) {
       ei.setFloatField(fieldName, (Float) newValue);
-    } else if(ei.instanceOf("C")) {
+    } else if(type.equals("char")) {
       ei.setCharField(fieldName, (char) newValue);
-    } else if(ei.instanceOf("B")) {
+    } else if(type.equals("byte")) {
       ei.setByteField(fieldName, (Byte) newValue);
-    } else if(ei.instanceOf("D")) {
+    } else if(type.equals("double")) {
       ei.setDoubleField(fieldName, (Double) newValue);
-    } else if(ei.instanceOf("J")) {
+    } else if(type.equals("long")) {
       ei.setLongField(fieldName, (Long) newValue);
-    } else if(ei.instanceOf("S")) {
+    } else if(type.equals("short")) {
       ei.setShortField(fieldName, (Short) newValue);
-    } else if(ei.instanceOf("Z")) {
+    } else if(type.equals("boolean")) {
       ei.setBooleanField(fieldName, (Boolean) newValue);
-    } else if(ei.instanceOf("[")) {
+    } else if(type.equals("[")) {
       // might be problematic - see nhandler GSoC issues
       //ei.setArrayField(fieldName, (Array) newValue);
     }
@@ -145,22 +150,22 @@ public class MethodModifications {
   public void applyModifications() {
     for(ModifiedFieldData fieldData : modifiedFields.values()) {
       //System.out.println("updating " + fieldData.fieldName + " new value is " + fieldData.newValue);
-      applyFieldUpdate(fieldData.fieldName, fieldData.targetObject, fieldData.newValue);
+      applyFieldUpdate(fieldData.fieldName, fieldData.type, fieldData.targetObject, fieldData.newValue);
     }
 
     for(ModifiedFieldData staticFieldData : modifiedStaticFields.values()) {
       ElementInfo targetClassObject = staticFieldData.classInfo.getModifiableClassObject();
-      applyFieldUpdate(staticFieldData.fieldName, targetClassObject, staticFieldData.newValue);
+      applyFieldUpdate(staticFieldData.fieldName, staticFieldData.type, targetClassObject, staticFieldData.newValue);
     }
   }
 
-  public void addField(String fieldName, ElementInfo ei, Object newValue) {
-    modifiedFields.put((fieldName.hashCode()+ei.hashCode()), new ModifiedFieldData(fieldName, ei, newValue));
+  public void addField(String fieldName, String type, ElementInfo ei, Object newValue) {
+    modifiedFields.put((fieldName.hashCode()+ei.hashCode()), new ModifiedFieldData(fieldName, type, ei, newValue));
   }
 
 
-  public void addStaticField(String fieldName, ClassInfo ci, Object newValue) {
-    modifiedStaticFields.put((fieldName.hashCode()+ci.hashCode()), new ModifiedFieldData(fieldName, ci, newValue));
+  public void addStaticField(String fieldName, String type, ClassInfo ci, Object newValue) {
+    modifiedStaticFields.put((fieldName.hashCode()+ci.hashCode()), new ModifiedFieldData(fieldName, type, ci, newValue));
   }
 
 

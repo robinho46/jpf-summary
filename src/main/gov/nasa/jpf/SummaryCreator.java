@@ -216,6 +216,12 @@ public class SummaryCreator extends ListenerAdapter {
         return;
       }
 
+      // just testing to see what breaks pool6
+      if( mi.getName().equals("access$100") || mi.getName().equals("access$300")) {
+        resetRecording("getValue");
+        return;
+      }
+
       if(methodName.equals("java.lang.StringBuilder.append(Ljava/lang/String;)Ljava/lang/StringBuilder;")) {
         return;
       }
@@ -254,12 +260,10 @@ public class SummaryCreator extends ListenerAdapter {
         MethodContext currentContext =  contextMap.get(methodName);
         MethodCounter counter = counterMap.get(methodName);
         counter.attemptedMatchCount++;
-
         // adding a fail-trip to avoid doing excessive context-matching
         if(counter.attemptedMatchCount - counter.argsMatchCount > 5 ) {
           return;
         }
-
         if(executedInsn instanceof INVOKESTATIC) {
           if(!currentContext.match(call.getArgumentValues(ti))) {
             //out.println("context mismatch " + methodName);
@@ -268,6 +272,11 @@ public class SummaryCreator extends ListenerAdapter {
             return;
           }
         }else{
+
+        /*out.println("trying summary of " + methodName);
+        out.println("context=" + contextMap.get(methodName));
+        out.println("mods=" + modificationMap.get(methodName));
+        out.println();*/
           //out.println("Matching context " + methodName + " " + contextMap.get(methodName));
           if(!currentContext.match(ti.getElementInfo(call.getLastObjRef()),call.getArgumentValues(ti))) {
             //out.println("context mismatch " + methodName);
@@ -294,7 +303,7 @@ public class SummaryCreator extends ListenerAdapter {
         if(nextInstruction instanceof NATIVERETURN) {
           return;
         }
-       
+    
         //out.println("applying summary of " + methodName);
         //out.println("context=" + contextMap.get(methodName));
         //out.println("mods=" + modificationMap.get(methodName));
@@ -406,12 +415,12 @@ public class SummaryCreator extends ListenerAdapter {
 
         if(finsn instanceof PUTFIELD) {
           for(String stackMethodName : recording) {
-            modificationMap.get(stackMethodName).addField(finsn.getFieldName(), ei, ei.getFieldValueObject(fi.getName()));
+            modificationMap.get(stackMethodName).addField(finsn.getFieldName(), fi.getType(), ei, ei.getFieldValueObject(fi.getName()));
           }
           
         } else if(finsn instanceof PUTSTATIC) {
           for(String stackMethodName : recording) {
-            modificationMap.get(stackMethodName).addStaticField(finsn.getFieldName(), fi.getClassInfo(), ei.getFieldValueObject(fi.getName()));
+            modificationMap.get(stackMethodName).addStaticField(finsn.getFieldName(), fi.getType(), fi.getClassInfo(), ei.getFieldValueObject(fi.getName()));
           }
           
         }
@@ -520,7 +529,7 @@ public class SummaryCreator extends ListenerAdapter {
     out.println("----------------------------------- search finished");
     out.println();
 
-    out.println(methodStatistics());
+    //out.println(methodStatistics());
     //out.println(nativeMethodList());
   }
 
