@@ -150,7 +150,7 @@ public class MethodModifications {
         return false;
     }
     for(ModifiedFieldData staticFieldData : modifiedStaticFields.values()) {
-      ElementInfo targetClassObject = staticFieldData.classInfo.getModifiableClassObject();
+      ElementInfo targetClassObject = staticFieldData.classInfo.getModifiableStaticElementInfo();
       if(targetClassObject.isFrozen()) 
         return false;
     }

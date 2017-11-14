@@ -255,7 +255,7 @@ public class SummaryCreator extends ListenerAdapter {
         }
 
 
-        // ideally non of the targets should have been frozen
+        // ideally none of the targets should have been frozen
         // but it seems like they are in log4j1 - fixed
         if(!modificationMap.get(methodName).canModifyAllTargets()) {
           return;
@@ -407,6 +407,19 @@ public class SummaryCreator extends ListenerAdapter {
       }
     }
   } 
+
+  @Override
+  public void choiceGeneratorRegistered (VM vm, ChoiceGenerator<?> nextCG, ThreadInfo currentThread, Instruction executedInstruction) {
+    resetRecording();
+  }
+  @Override
+  public void choiceGeneratorSet (VM vm, ChoiceGenerator<?> newCG) {
+    resetRecording();
+  }
+  @Override
+  public void choiceGeneratorAdvanced (VM vm, ChoiceGenerator<?> currentCG) {
+    resetRecording();
+  }
 
 
 
