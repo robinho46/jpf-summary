@@ -119,14 +119,11 @@ public class MethodModifications {
   } 
 
   public void applyFieldUpdate(String fieldName, String type, ElementInfo ei, Object newValue) {
-    // if reference object?
-
     //System.out.println("Setting " + ei + "." + fieldName + " to " + newValue);
 
     // basic types
     if(type.equals("int")) {
       ei.setIntField(fieldName, (Integer) newValue);
-      System.out.println(ei.getIntField(fieldName));
     } else if(type.equals("float")) {
       ei.setFloatField(fieldName, (Float) newValue);
     } else if(type.equals("char")) {
@@ -141,20 +138,35 @@ public class MethodModifications {
       ei.setShortField(fieldName, (Short) newValue);
     } else if(type.equals("boolean")) {
       ei.setBooleanField(fieldName, (Boolean) newValue);
-    } else if(type.equals("[")) {
+    } //else if(type.equals("[")) {
       // might be problematic - see nhandler GSoC issues
       //ei.setArrayField(fieldName, (Array) newValue);
+    //}
+  }
+
+  public boolean canModifyAllTargets() {
+    for(ModifiedFieldData fieldData : modifiedFields.values()) {
+      if(fieldData.targetObject.isFrozen())
+        return false;
     }
+    for(ModifiedFieldData staticFieldData : modifiedStaticFields.values()) {
+      ElementInfo targetClassObject = staticFieldData.classInfo.getModifiableClassObject();
+      if(targetClassObject.isFrozen()) 
+        return false;
+    }
+
+    return true;
   }
 
   public void applyModifications() {
     for(ModifiedFieldData fieldData : modifiedFields.values()) {
-      //System.out.println("updating " + fieldData.fieldName + " new value is " + fieldData.newValue);
+      assert(!fieldData.targetObject.isShared());  
       applyFieldUpdate(fieldData.fieldName, fieldData.type, fieldData.targetObject, fieldData.newValue);
     }
 
     for(ModifiedFieldData staticFieldData : modifiedStaticFields.values()) {
-      ElementInfo targetClassObject = staticFieldData.classInfo.getModifiableClassObject();
+      ElementInfo targetClassObject = staticFieldData.classInfo.getModifiableStaticElementInfo();
+      assert(targetClassObject != null);
       applyFieldUpdate(staticFieldData.fieldName, staticFieldData.type, targetClassObject, staticFieldData.newValue);
     }
   }
