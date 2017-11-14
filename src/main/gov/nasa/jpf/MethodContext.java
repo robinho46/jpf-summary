@@ -214,6 +214,11 @@ public class MethodContext {
   }
 
   public void addField(String fieldName, ElementInfo source, Object value) {
+    if(source.isShared()) {
+      System.out.println("READING FROM SHARED OBJECT " + source );
+    }
+    assert(!source.isShared());
+ 
     dependentFields.put((fieldName.hashCode()+source.hashCode()), new DependentFieldData(fieldName, source, value));
   }
 
