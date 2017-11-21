@@ -132,13 +132,7 @@ public class MethodContext {
     }
 
     // now both args and static fields are guaranteed to match
-    if(!fieldsMatch()) {
-      //System.out.println("fields mismatch");
-      return false;
-    }
-
-
-    return true;
+    return fieldsMatch();
   }
 
   private boolean valuesEqual(Object oldValue, Object currentValue) {
@@ -206,7 +200,7 @@ public class MethodContext {
   }
 
   public boolean containsField(String fieldName, ElementInfo source) {
-    return dependentFields.containsKey(fieldName);
+    return dependentFields.containsKey((fieldName + source.toString()).hashCode());
   }
 
   public boolean containsStaticField(String fieldName) {
@@ -219,7 +213,7 @@ public class MethodContext {
     }
     assert(!source.isShared());
  
-    dependentFields.put((fieldName.hashCode()+source.hashCode()), new DependentFieldData(fieldName, source, value));
+    dependentFields.put((fieldName + source.toString()).hashCode(), new DependentFieldData(fieldName, source, value));
   }
 
   public void addStaticField(String fieldName, ClassInfo ci, Object value) {
@@ -241,31 +235,27 @@ public class MethodContext {
       return "{}";
     }
     StringBuilder sb = new StringBuilder();
-    sb.append("{\"contextSize\":" + (1 + params.length + dependentFields.size() + dependentStaticFields.size()));
-    sb.append(", \"this\":\"" + _this + "\"");
+    sb.append("{\"contextSize\":").append(1 + params.length + dependentFields.size() + dependentStaticFields.size());
+    sb.append(", \"this\":\"").append(_this).append("\"");
     sb.append(", \"args\":[ ");
     //sb.append("{args:[");
     for(Object arg : params) {
       if(arg != params[params.length-1]){
-        sb.append("\""+arg+"\",");
+        sb.append("\"").append(arg).append("\",");
       }else{
-        sb.append("\""+arg+"\"");
+        sb.append("\"").append(arg).append("\"");
       }
     }
     sb.append("], \"fields\":[ ");
     for(DependentFieldData fieldData : dependentFields.values()) {
-      sb.append("{\"sourceObject\":\"" + fieldData.sourceObject 
-        + "\", \"fieldName\":\"" + fieldData.fieldName 
-        + "\", \"value\":\"" + fieldData.previousValue +"\"},");
+      sb.append("{\"sourceObject\":\"").append(fieldData.sourceObject).append("\", \"fieldName\":\"").append(fieldData.fieldName).append("\", \"value\":\"").append(fieldData.previousValue).append("\"},");
     }
     sb.deleteCharAt(sb.length()-1);
     sb.append("], \"staticFields\":[ ");
 
     for(String fieldName : dependentStaticFields.keySet()) {
       DependentFieldData fieldData = dependentStaticFields.get(fieldName);
-      sb.append("{\"fieldName\":\"" + fieldData.fieldName
-        + "\", \"classInfo\":\"" + fieldData.classInfo 
-        + "\", \"value\":\"" + fieldData.previousValue +"\"},");
+      sb.append("{\"fieldName\":\"").append(fieldData.fieldName).append("\", \"classInfo\":\"").append(fieldData.classInfo).append("\", \"value\":\"").append(fieldData.previousValue).append("\"},");
     }
     sb.deleteCharAt(sb.length()-1);
     sb.append("]}");

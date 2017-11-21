@@ -29,16 +29,17 @@ public class MethodCounter {
     instructionCount = 0;
     argsMatchCount = 0;
     attemptedMatchCount = 0;
+    failedMatchCount = 0;
 
+    interruptedByOther = false;
     interruptedByNativeCall = false;
     interruptedByTransition = false;
-    isInit = false;
-    interruptingMethod = "";
+    reasonForInterruption = "";
 
   }
 
   public boolean interrupted() {
-    return interruptedByNativeCall || interruptedByTransition;
+    return interruptedByNativeCall || interruptedByTransition || interruptedByOther;
   }
 
   @Override
@@ -53,8 +54,7 @@ public class MethodCounter {
     str += ",\"interruptedByTransition\":" + interruptedByTransition;
     str += ",\"interruptedByNativeCall\":" + interruptedByNativeCall;
     if(interruptedByNativeCall)
-      str += ",\"interruptingMethod\":\"" + interruptingMethod + "\"";
-    //str += ",\"isInit\":" + isInit;
+      str += ",\"interruption\":\"" + reasonForInterruption + "\"";
     str += "}";
     return str;
   }
@@ -69,7 +69,7 @@ public class MethodCounter {
     str += "\ninstructionCount=" + instructionCount;
 
     if(interruptedByNativeCall){
-      str += "\nINTERRUPTED BY " + interruptingMethod;
+      str += "\nINTERRUPTED BY " + reasonForInterruption;
     } else if(interruptedByTransition) {
       str += "\nINTERRUPTED BY TRANSITION";
     }
@@ -93,8 +93,8 @@ public class MethodCounter {
   public boolean recorded; 
   public boolean interruptedByNativeCall;
   public boolean interruptedByTransition;
-  public boolean isInit;
-  public String interruptingMethod;
+  public boolean interruptedByOther;
+  public String reasonForInterruption;
 
   public int readCount;
   public int writeCount;
@@ -103,4 +103,5 @@ public class MethodCounter {
 
   public int argsMatchCount;
   public int attemptedMatchCount;
+  public int failedMatchCount;
 }

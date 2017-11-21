@@ -79,30 +79,26 @@ public class MethodModifications {
       return "{}";
     }
     StringBuilder sb = new StringBuilder();
-    sb.append("{\"modsSize\":" + (1 + params.length + modifiedFields.size() + modifiedStaticFields.size()));
-    sb.append(", \"returnValue\":\"" + returnValue + "\"");
+    sb.append("{\"modsSize\":").append(1 + params.length + modifiedFields.size() + modifiedStaticFields.size());
+    sb.append(", \"returnValue\":\"").append(returnValue).append("\"");
     sb.append(", \"args\":[ ");
     //sb.append("{args:[");
     for(Object arg : params) {
       if(arg != params[params.length-1]){
-        sb.append("\""+arg+"\",");
+        sb.append("\"").append(arg).append("\",");
       }else{
-        sb.append("\""+arg+"\"");
+        sb.append("\"").append(arg).append("\"");
       }
     }
     sb.append("], \"fields\":[ ");
     for(ModifiedFieldData fieldData : modifiedFields.values()) {
-      sb.append("{\"fieldName\":\"" + fieldData.fieldName 
-        + "\", \"targetObject\":\"" + fieldData.targetObject 
-        + "\", \"value\":\"" + fieldData.newValue +"\"},");
+      sb.append("{\"fieldName\":\"").append(fieldData.fieldName).append("\", \"targetObject\":\"").append(fieldData.targetObject).append("\", \"value\":\"").append(fieldData.newValue).append("\"},");
     }
     sb.deleteCharAt(sb.length()-1);
     sb.append("], \"staticFields\":[ ");
 
     for(ModifiedFieldData fieldData : modifiedStaticFields.values()) {
-      sb.append("{\"fieldName\":\"" + fieldData.fieldName 
-        + "\", \"classInfo\":\"" + fieldData.classInfo 
-        + "\", \"value\":\"" + fieldData.newValue +"\"},");
+      sb.append("{\"fieldName\":\"").append(fieldData.fieldName).append("\", \"classInfo\":\"").append(fieldData.classInfo).append("\", \"value\":\"").append(fieldData.newValue).append("\"},");
     }
     sb.deleteCharAt(sb.length()-1);
     sb.append("]}");
