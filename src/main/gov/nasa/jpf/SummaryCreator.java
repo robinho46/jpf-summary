@@ -41,6 +41,7 @@ import gov.nasa.jpf.vm.MJIEnv;
 import gov.nasa.jpf.vm.VM;
 import gov.nasa.jpf.vm.StackFrame;
 import gov.nasa.jpf.vm.Types;
+import gov.nasa.jpf.vm.ClassInfo;
 import gov.nasa.jpf.vm.MethodInfo;
 import gov.nasa.jpf.vm.ThreadInfo;
 import gov.nasa.jpf.vm.ElementInfo;
@@ -48,6 +49,9 @@ import gov.nasa.jpf.vm.FieldInfo;
 import gov.nasa.jpf.vm.LocalVarInfo;
 import gov.nasa.jpf.vm.Instruction;
 import gov.nasa.jpf.vm.bytecode.FieldInstruction;
+import gov.nasa.jpf.vm.bytecode.StaticFieldInstruction;
+
+import gov.nasa.jpf.vm.LoadOnJPFRequired;
 
 import java.io.PrintWriter;
 import java.util.HashSet;
@@ -115,6 +119,10 @@ public class SummaryCreator extends ListenerAdapter {
     */
     blackList.add("java.io.ObjectInputStream$BlockDataInputStream.readByte()B");
 
+    // pool1 orig - these summaries somehow reduced the state space by 4? 
+    // could be because of the data-race?
+    //blackList.add("org.apache.commons.pool.impl.CursorableLinkedList$Listable.next()Lorg/apache/commons/pool/impl/CursorableLinkedList$Listable;");
+    //blackList.add("org.apache.commons.pool.impl.CursorableLinkedList$Listable.value()Ljava/lang/Object;");
     // Todo add classnames here
     nativeWhiteList.add("append");
     nativeWhiteList.add("desiredAssertionStatus");
@@ -228,6 +236,8 @@ public class SummaryCreator extends ListenerAdapter {
         return;
       }
 
+      int runningThreads = vm.getThreadList().getCount().alive;
+
       Object[] args = call.getArgumentValues(ti);
       if(!contextMap.containsKey(methodName)) {
         byte[] types = mi.getArgumentTypes();
@@ -239,9 +249,9 @@ public class SummaryCreator extends ListenerAdapter {
         }
 
         if(executedInsn instanceof INVOKESTATIC) {
-          contextMap.put(methodName, new MethodContext(args));
+          contextMap.put(methodName, new MethodContext(args, runningThreads == 1));
         }else{  
-          contextMap.put(methodName, new MethodContext(ti.getElementInfo(call.getLastObjRef()),args));
+          contextMap.put(methodName, new MethodContext(ti.getElementInfo(call.getLastObjRef()),args, runningThreads==1));
         }
       }
       
@@ -267,16 +277,16 @@ public class SummaryCreator extends ListenerAdapter {
           recording.add(methodName);
           modificationMap.put(methodName, new MethodModifications(args));
           if(executedInsn instanceof INVOKESTATIC) {
-            contextMap.put(methodName, new MethodContext(args));
+            contextMap.put(methodName, new MethodContext(args, runningThreads==1));
           }else{  
-            contextMap.put(methodName, new MethodContext(ti.getElementInfo(call.getLastObjRef()),args));
+            contextMap.put(methodName, new MethodContext(ti.getElementInfo(call.getLastObjRef()), args, runningThreads==1));
           }
           counter.attemptedMatchCount = 0;
           return;
         }
 
         if(executedInsn instanceof INVOKESTATIC) {
-          if(!currentContext.match(call.getArgumentValues(ti))) {
+          if(!currentContext.match(call.getArgumentValues(ti), runningThreads==1)) {
             counter.failedMatchCount++;
             //out.println("context mismatch " + methodName);
             //out.println("context=" + contextMap.get(methodName));
@@ -284,7 +294,7 @@ public class SummaryCreator extends ListenerAdapter {
             return;
           }
         }else{
-          if(!currentContext.match(ti.getElementInfo(call.getLastObjRef()),call.getArgumentValues(ti))) {
+          if(!currentContext.match(ti.getElementInfo(call.getLastObjRef()),call.getArgumentValues(ti),runningThreads==1)) {
             counter.failedMatchCount++;
             //out.println("context mismatch " + methodName);
             //out.println("context=" + contextMap.get(methodName));

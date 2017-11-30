@@ -37,6 +37,8 @@ import java.util.Iterator;
 public class MethodContext {
 
   private Object[] params;
+  private boolean runningAlone;
+
   private ElementInfo _this;
   // We need to track Objectref, FieldName, Type(?), Value 
   private HashMap<Integer,DependentFieldData> dependentFields;
@@ -44,7 +46,6 @@ public class MethodContext {
 
   private class DependentFieldData {
     public String fieldName;
-    // probably not be easily testable
     // for non-static fields
     public ElementInfo sourceObject;
     public Object previousValue;
@@ -70,13 +71,15 @@ public class MethodContext {
     }
   }
 
-  public MethodContext(Object[] args) {
+  public MethodContext(Object[] args, boolean runningAlone) {
+    this.runningAlone = runningAlone;
     params = args;
     dependentFields = new HashMap<>();
     dependentStaticFields = new HashMap<>();
   }
 
-  public MethodContext(ElementInfo _this, Object[] args) {
+  public MethodContext(ElementInfo _this, Object[] args, boolean runningAlone) {
+    this.runningAlone = runningAlone;
     this._this = _this;
     params = args;
     dependentFields = new HashMap<>();
@@ -105,7 +108,7 @@ public class MethodContext {
   }
 
   
-  public boolean match(ElementInfo _this, Object[] args) {
+  public boolean match(ElementInfo _this, Object[] args, boolean runningAlone) {
     assert(this._this != null);
     if(this._this != _this || !this._this.equals(_this)){
       //System.out.println("this mismatch");
@@ -113,11 +116,12 @@ public class MethodContext {
       return false;
     }
 
-    return match(args);
+    return match(args,runningAlone);
   }
 
-  public boolean match(Object[] args) {
-
+  public boolean match(Object[] args, boolean runningAlone) {
+    if(this.runningAlone != runningAlone)
+      return false;
     if(!argumentsMatch(args)) {
       //System.out.println("args mismatch");
       return false;
@@ -176,6 +180,7 @@ public class MethodContext {
       DependentFieldData fieldData = dependentStaticFields.get(fieldName);
       ClassInfo ci = fieldData.classInfo;
       Object oldValue = fieldData.previousValue;
+      // sometimes throws NPE, presumably the ci is not what we want here
       Object currentValue = ci.getStaticFieldValueObject(fieldName);
 
       if(!valuesEqual(oldValue,currentValue))
