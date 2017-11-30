@@ -77,7 +77,7 @@ public class SummaryCreator extends ListenerAdapter {
   // side-effects that can't be captured in the summary
   static HashSet<String> nativeWhiteList = new HashSet<>();
 
-
+  static SummaryContainer container = new SummaryContainer();
   static HashMap<String,MethodContext> contextMap = new HashMap<>();
   static HashMap<String,MethodCounter> counterMap = new HashMap<>();
   static HashMap<String,MethodModifications> modificationMap = new HashMap<>();
@@ -207,9 +207,9 @@ public class SummaryCreator extends ListenerAdapter {
       
       if(!counterMap.containsKey(methodName)) {
         counterMap.put(methodName, new MethodCounter(methodName));
+        counterMap.get(methodName).instructionCount = mi.getNumberOfInstructions();
       }
       counterMap.get(methodName).totalCalls++;
-      counterMap.get(methodName).instructionCount = mi.getNumberOfInstructions();
 
       if(mi.getReturnTypeCode() == Types.T_ARRAY) {
         stopRecording("array type");
@@ -261,8 +261,9 @@ public class SummaryCreator extends ListenerAdapter {
 
       if(!recorded.contains(methodName)) {
         recording.add(methodName);
-      }else{
-        MethodContext currentContext =  contextMap.get(methodName);
+      }
+      if(container.hasSummary(methodName)) {
+        //MethodContext currentContext =  contextMap.get(methodName);
         MethodCounter counter = counterMap.get(methodName);
         counter.attemptedMatchCount++;
 
@@ -272,6 +273,7 @@ public class SummaryCreator extends ListenerAdapter {
         }
         // we have failed to match the context more than 10 times in a row
         // bad(?) heuristic, similar contexts will occur close to each other
+        /*
         if(counter.attemptedMatchCount > 10) {
           recorded.remove(methodName);
           recording.add(methodName);
@@ -283,24 +285,17 @@ public class SummaryCreator extends ListenerAdapter {
           }
           counter.attemptedMatchCount = 0;
           return;
+        }*/
+        MethodSummary summary;
+        if(executedInsn instanceof INVOKESTATIC) {
+          summary = container.hasMatchingContext(methodName, call.getArgumentValues(ti), runningThreads==1);
+        }else{
+          summary = container.hasMatchingContext(methodName, ti.getElementInfo(call.getLastObjRef()),call.getArgumentValues(ti),runningThreads==1);
         }
 
-        if(executedInsn instanceof INVOKESTATIC) {
-          if(!currentContext.match(call.getArgumentValues(ti), runningThreads==1)) {
-            counter.failedMatchCount++;
-            //out.println("context mismatch " + methodName);
-            //out.println("context=" + contextMap.get(methodName));
-            //out.println();
-            return;
-          }
-        }else{
-          if(!currentContext.match(ti.getElementInfo(call.getLastObjRef()),call.getArgumentValues(ti),runningThreads==1)) {
-            counter.failedMatchCount++;
-            //out.println("context mismatch " + methodName);
-            //out.println("context=" + contextMap.get(methodName));
-            //out.println();
-            return;
-          }
+        if(summary == null) {
+          counter.failedMatchCount++;
+          return;
         }
         counter.attemptedMatchCount = 0;
         counter.argsMatchCount++;
@@ -308,27 +303,27 @@ public class SummaryCreator extends ListenerAdapter {
         // We need to ensure that context information
         // propagates down to other methods that might be recording
         for(String r : recording) {
-          contextMap.get(r).addContextFields(currentContext);
+          contextMap.get(r).addContextFields(summary.context);
         }
 
 
         // ideally none of the targets should have been frozen
         // but it seems like they are in log4j1 - fixed
-        if(!modificationMap.get(methodName).canModifyAllTargets()) {
+        if(!summary.mods.canModifyAllTargets()) {
           return;
         }
 
         // TODO: Get class in a different way that doesn't break
-        if(!contextMap.get(methodName).getDependentStaticFields().isEmpty()) {
+        if(!summary.context.getDependentStaticFields().isEmpty()) {
           return;
         }
 
-        //out.println("applying summary of " + methodName);
-        //out.println("context=" + contextMap.get(methodName));
-        //out.println("mods=" + modificationMap.get(methodName));
-        //out.println();
-
-        modificationMap.get(methodName).applyModifications();
+        summary.mods.applyModifications();
+        // at this point we want to make sure that we don't create another summary
+        // like the one we just applied
+        contextMap.remove(methodName);
+        modificationMap.remove(methodName);
+        recording.remove(methodName);
 
         // find the return instruction
         Instruction nextInstruction = mi.getInstruction(mi.getNumberOfInstructions()-1);
@@ -339,7 +334,7 @@ public class SummaryCreator extends ListenerAdapter {
         if(nextInstruction instanceof RETURN) {
           StackFrame frame = ti.getModifiableTopFrame();
           frame.removeArguments(mi);
-          Object returnValue = modificationMap.get(methodName).getReturnValue();
+          Object returnValue = summary.mods.getReturnValue();
           assert(returnValue == null);
           ti.skipInstruction(nextInstruction);
           return;
@@ -349,7 +344,7 @@ public class SummaryCreator extends ListenerAdapter {
         // prepare stack with correct return value
         JVMReturnInstruction ret = (JVMReturnInstruction) nextInstruction;
         StackFrame frame = ti.getModifiableTopFrame();
-        Object returnValue = modificationMap.get(methodName).getReturnValue();
+        Object returnValue = summary.mods.getReturnValue();
         if(returnValue instanceof Long) {
           frame.pushLong((Long) returnValue);
         } else if(returnValue instanceof Double) {
@@ -371,15 +366,21 @@ public class SummaryCreator extends ListenerAdapter {
       }
 
 
-
-
     } else if (executedInsn instanceof JVMReturnInstruction) {
       JVMReturnInstruction ret = (JVMReturnInstruction) executedInsn;
       mi = ret.getMethodInfo();
       String methodName = mi.getFullName();
       if(recording.contains(methodName)) {
-        recorded.add(methodName);
+        //recorded.add(methodName);
         modificationMap.get(methodName).setReturnValue(ret.getReturnValue(ti));
+        if(container.canStoreMoreSummaries(methodName)) {
+          container.addSummary(methodName, contextMap.get(methodName), modificationMap.get(methodName));
+          contextMap.remove(methodName);
+          modificationMap.remove(methodName);
+        } else {
+          // stop recording "methodName"
+          recorded.add(methodName);
+        }
         counterMap.get(methodName).recorded = true;
         recording.remove(methodName);
       }
@@ -389,8 +390,6 @@ public class SummaryCreator extends ListenerAdapter {
         //out.println("CALLED WHITELISTED NATIVE FUNCTION " + mi.getFullName());
         return;
       }
-
-
       stopRecording(methodName);
     } else if(executedInsn instanceof FieldInstruction) {
       String methodName = mi.getFullName();
@@ -504,8 +503,8 @@ public class SummaryCreator extends ListenerAdapter {
   public void searchFinished(Search search) {
     out.println("----------------------------------- search finished");
     out.println();
-
-    out.println(methodStatistics());
+    //methodStatistics();
+    //out.println(methodStatistics());
     //out.println(nativeMethodList());
   }
 
@@ -570,7 +569,7 @@ public class SummaryCreator extends ListenerAdapter {
     }
     methodStats.deleteCharAt(methodStats.length()-1);
     methodStats.append("]}");
-    //out.println("Saved " + savedInstructions + " instructions");
+    out.println("Saved " + savedInstructions + " instructions");
     return methodStats.toString();
   }
 }
