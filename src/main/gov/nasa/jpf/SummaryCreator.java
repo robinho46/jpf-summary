@@ -98,34 +98,8 @@ public class SummaryCreator extends ListenerAdapter {
       skip = true;
     }
 
-    // log4j1 fixed has problems with this.
-    blackList.add("toString");
-    //blackList.add("activateObject");
-    //blackList.add("passivateObject");
-
-    // log4j3 orig - summary causes argument exception in native call
-    // presumably return value is wrong?
-    // I think what happens is that they redirect a String to point to
-    // a different underlying char[]? only thing that makes sense
-    //blackList.add("length");
-
-    // causes failure in  gov.nasa.jpf.test.java.io.ObjectStreamTest
-    /* Summary looks like this 
-    context = 
-    "this": "java.io.ObjectInputStream$BlockDataInputStream@1c7",
-    "fields": [
-        "sourceObject": "java.io.ObjectInputStream$BlockDataInputStream@1c7",
-        "fieldName": "in","value": "java.io.ObjectInputStream$PeekInputStream@1ce"
-        "fieldName": "blkmode","value": "false"
-        "fieldName": "peekb","value": "115" ],
-
-    mods = {
-    "returnValue": "115",
-    "fields": [
-        "targetObject": "java.io.ObjectInputStream$PeekInputStream@1ce",
-        "fieldName": "peekb","value": "-1" ],
-    }
-    */
+    //TEST-gov.nasa.jpf.test.java.concurrent.ExecutorServiceTest
+    blackList.add("java.util.concurrent.locks.AbstractOwnableSynchronizer.setExclusiveOwnerThread(Ljava/lang/Thread;)V");
 
     // pool1 orig - these summaries somehow reduced the state space by 4? 
     // could be because of the data-race?
@@ -187,7 +161,7 @@ public class SummaryCreator extends ListenerAdapter {
     if(skip || mi == null) {
       return;
     }
-    //out.println("going to execute " + instructionToExecute);
+
     int runningThreads = vm.getThreadList().getCount().alive;
     ThreadInfo ti = currentThread;
 
@@ -248,30 +222,30 @@ public class SummaryCreator extends ListenerAdapter {
         }
 
         summary.mods.applyModifications();
-        
+        //out.println("applied summary for " + methodName);
+        //out.println(summary.context);
+        //out.println(summary.mods);
+
         // at this point we want to make sure that we don't create another summary
         // like the one we just applied
         contextMap.remove(methodName);
         modificationMap.remove(methodName);
         recording.remove(methodName);
-        //if(methodName.equals("java.math.//.getInt(I)I")) {
-        //  out.println("applied summary for " + methodName);
-        //}
-        // find the return instruction
+
+
         Instruction nextInstruction = call.getNext();
         skipped = true;
         
-        //pop arguments
         int nArgs = mi.getArgumentsSize();
         StackFrame frame = ti.getModifiableTopFrame();
         frame.removeArguments(mi);
+
         if(mi.getReturnType().equals("V")) {
           ti.skipInstruction(nextInstruction);
           return;
         }
 
         // prepare stack with correct return value
-        //JVMReturnInstruction ret = (JVMReturnInstruction) nextInstruction;
         Object returnValue = summary.mods.getReturnValue();
         if(returnValue instanceof Long) {
           frame.pushLong((Long) returnValue);
@@ -292,13 +266,9 @@ public class SummaryCreator extends ListenerAdapter {
           if(returnValue == null){
             frame.push(MJIEnv.NULL);
           }else{
-            // this was failing before?
-            //if(frame.getSlots().length > 0) {
-              frame.push((Integer) returnValue);
-            //}
+            frame.push((Integer) returnValue);
           }
         }
-//
         ti.skipInstruction(nextInstruction);
       }
     }
@@ -358,6 +328,15 @@ public class SummaryCreator extends ListenerAdapter {
         return;
       }
 
+      
+      // This might actually be "OK", 
+      // if breaking attributes only affects other extensions, not core?
+      // Test-gov.nasa.jpf.test.mc.basic.AttrsTest
+      if(methodName.equals("java.lang.Integer.intValue()I")) {
+        stopRecording("java.lang.Integer.intValue()I");
+        return;
+      }
+
       // if a method is blacklisted, or is a synthetic method
       // methodName will match mi.getFullName,
       // getName() is used for the manually entered names
@@ -383,7 +362,11 @@ public class SummaryCreator extends ListenerAdapter {
 
         if(executedInsn instanceof INVOKESTATIC) {
           contextMap.put(methodName, new MethodContext(args, runningThreads == 1));
-        }else{  
+        }else{
+          if(ti.getElementInfo(call.getLastObjRef()) == null) {
+            stopRecording("faulty this");
+            return;
+          }
           contextMap.put(methodName, new MethodContext(ti.getElementInfo(call.getLastObjRef()),args, runningThreads==1));
         }
       }
