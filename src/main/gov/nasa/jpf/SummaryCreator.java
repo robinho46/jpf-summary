@@ -183,17 +183,13 @@ public class SummaryCreator extends ListenerAdapter {
         if(instructionToExecute instanceof INVOKESTATIC) {
           summary = container.hasMatchingContext(methodName, call.getArgumentValues(ti), runningThreads==1);
         }else{
-          Object[] ars;
+          Object[] args;
           StackFrame top = ti.getTopFrame();
           byte[] argTypes = mi.getArgumentTypes();
-          try {
-            ars = call.getArgumentValues(ti);
-          } catch(NullPointerException e) {
-            ars = top.getArgumentsValues(ti,argTypes);
-          }
+          args = top.getArgumentsValues(ti,argTypes);
           // call.getArgumentValues() throws NPE here in log4j2 orig
           // at line 890 of StackFrame, which is strange cause this is executing the same code
-          summary = container.hasMatchingContext(methodName, ti.getElementInfo(top.peek(mi.getArgumentsSize()-1)), ars,runningThreads==1);
+          summary = container.hasMatchingContext(methodName, ti.getElementInfo(top.peek(mi.getArgumentsSize()-1)), args,runningThreads==1);
         }
 
         if(summary == null) {
