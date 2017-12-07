@@ -39,7 +39,7 @@ public class MethodContext {
   private Object[] params;
   private boolean runningAlone;
 
-  private ElementInfo _this;
+  public ElementInfo _this;
   // We need to track Objectref, FieldName, Type(?), Value 
   private HashMap<Integer,DependentFieldData> dependentFields;
   private HashMap<String,DependentFieldData> dependentStaticFields;

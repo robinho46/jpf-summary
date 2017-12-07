@@ -83,6 +83,7 @@ public class SummaryCreator extends ListenerAdapter {
   static HashMap<String,MethodModifications> modificationMap = new HashMap<>();
 
   boolean skipInit = false;
+  boolean skipped = false;
 
   MethodInfo lastMi;
   PrintWriter out;
@@ -99,6 +100,14 @@ public class SummaryCreator extends ListenerAdapter {
 
     // log4j1 fixed has problems with this.
     blackList.add("toString");
+    //blackList.add("activateObject");
+    //blackList.add("passivateObject");
+
+    // log4j3 orig - summary causes argument exception in native call
+    // presumably return value is wrong?
+    // I think what happens is that they redirect a String to point to
+    // a different underlying char[]? only thing that makes sense
+    //blackList.add("length");
 
     // causes failure in  gov.nasa.jpf.test.java.io.ObjectStreamTest
     /* Summary looks like this 
@@ -117,7 +126,6 @@ public class SummaryCreator extends ListenerAdapter {
         "fieldName": "peekb","value": "-1" ],
     }
     */
-    blackList.add("java.io.ObjectInputStream$BlockDataInputStream.readByte()B");
 
     // pool1 orig - these summaries somehow reduced the state space by 4? 
     // could be because of the data-race?
@@ -171,18 +179,141 @@ public class SummaryCreator extends ListenerAdapter {
     recording = new HashSet<>();
   }
 
-  @Override
-  public void threadInterrupted(VM vm, ThreadInfo interruptedThread) {
-    stopRecording();
-  }
 
   @Override 
-  public void executeInstruction(VM vm, ThreadInfo currentThread, Instruction instructionToExecute) { }
+  public void executeInstruction(VM vm, ThreadInfo currentThread, Instruction instructionToExecute) { 
+    MethodInfo mi = instructionToExecute.getMethodInfo();
+    
+    if(skip || mi == null) {
+      return;
+    }
+    //out.println("going to execute " + instructionToExecute);
+    int runningThreads = vm.getThreadList().getCount().alive;
+    ThreadInfo ti = currentThread;
+
+    if (instructionToExecute instanceof JVMInvokeInstruction) {
+      JVMInvokeInstruction call = (JVMInvokeInstruction) instructionToExecute;
+      mi = call.getInvokedMethod();
+
+      
+      if(mi == null) {
+        return;
+      }
+      assert( mi != null);
+      String methodName = call.getInvokedMethod().getFullName();
+      if(container.hasSummary(methodName)) {
+        MethodCounter counter = counterMap.get(methodName);
+        counter.attemptedMatchCount++;
+
+        MethodSummary summary;
+        if(instructionToExecute instanceof INVOKESTATIC) {
+          summary = container.hasMatchingContext(methodName, call.getArgumentValues(ti), runningThreads==1);
+        }else{
+          Object[] ars;
+          StackFrame top = ti.getTopFrame();
+          byte[] argTypes = mi.getArgumentTypes();
+          try {
+            ars = call.getArgumentValues(ti);
+          } catch(NullPointerException e) {
+            ars = top.getArgumentsValues(ti,argTypes);
+          }
+          // call.getArgumentValues() throws NPE here in log4j2 orig
+          // at line 890 of StackFrame, which is strange cause this is executing the same code
+          summary = container.hasMatchingContext(methodName, ti.getElementInfo(top.peek(mi.getArgumentsSize()-1)), ars,runningThreads==1);
+        }
+
+        if(summary == null) {
+
+          counter.failedMatchCount++;
+          return;
+        }
+        counter.attemptedMatchCount = 0;
+        counter.argsMatchCount++;
+
+        // ideally none of the targets should have been frozen
+        // but it seems like they are in log4j1 - fixed
+        if(!summary.mods.canModifyAllTargets()) {
+          return;
+        }
+
+        // TODO: Get class in a different way that doesn't break
+        if(!summary.context.getDependentStaticFields().isEmpty()) {
+          return;
+        }
+
+        // We need to ensure that context information
+        // propagates down to other methods that might be recording
+        for(String r : recording) {
+          contextMap.get(r).addContextFields(summary.context);
+        }
+
+        summary.mods.applyModifications();
+        
+        // at this point we want to make sure that we don't create another summary
+        // like the one we just applied
+        contextMap.remove(methodName);
+        modificationMap.remove(methodName);
+        recording.remove(methodName);
+        //if(methodName.equals("java.math.//.getInt(I)I")) {
+        //  out.println("applied summary for " + methodName);
+        //}
+        // find the return instruction
+        Instruction nextInstruction = call.getNext();
+        skipped = true;
+        
+        //pop arguments
+        int nArgs = mi.getArgumentsSize();
+        StackFrame frame = ti.getModifiableTopFrame();
+        frame.removeArguments(mi);
+        if(mi.getReturnType().equals("V")) {
+          ti.skipInstruction(nextInstruction);
+          return;
+        }
+
+        // prepare stack with correct return value
+        //JVMReturnInstruction ret = (JVMReturnInstruction) nextInstruction;
+        Object returnValue = summary.mods.getReturnValue();
+        if(returnValue instanceof Long) {
+          frame.pushLong((Long) returnValue);
+        } else if(returnValue instanceof Double) {
+          frame.pushDouble((Double) returnValue);
+        } else if(returnValue instanceof Float) {
+          frame.pushFloat((Float) returnValue);
+        } else if(returnValue instanceof ElementInfo) {
+          frame.pushRef(((ElementInfo) returnValue).getObjectRef());
+        } else if(returnValue instanceof Boolean) {
+          boolean flag = (Boolean) returnValue;
+          if(flag) {
+            frame.push(0);
+          } else {
+            frame.push(1);
+          }
+        } else {
+          if(returnValue == null){
+            frame.push(MJIEnv.NULL);
+          }else{
+            // this was failing before?
+            //if(frame.getSlots().length > 0) {
+              frame.push((Integer) returnValue);
+            //}
+          }
+        }
+//
+        ti.skipInstruction(nextInstruction);
+      }
+    }
+  }
+  
   
   @Override
   public void instructionExecuted (VM vm, ThreadInfo ti, Instruction nextInsn, Instruction executedInsn) {
     MethodInfo mi = executedInsn.getMethodInfo();
-
+    if(skipped) {
+      //out.println(executedInsn);
+      //out.println(nextInsn);
+      skipped = false;
+      return;
+    }
     if (skip) {
       if (mi == miMain) {
         skip = false;
@@ -191,6 +322,7 @@ public class SummaryCreator extends ListenerAdapter {
       }
     }
 
+    //out.println(executedInsn);
     if (executedInsn instanceof JVMInvokeInstruction) {
       JVMInvokeInstruction call = (JVMInvokeInstruction)executedInsn;
       mi = call.getInvokedMethod(ti);
@@ -231,7 +363,8 @@ public class SummaryCreator extends ListenerAdapter {
       // getName() is used for the manually entered names
       if(blackList.contains(methodName) 
           || blackList.contains(mi.getName())
-          || mi.getName().contains("$")) {
+          || methodName.contains("reflect")
+          || methodName.contains("$")) {
         stopRecording(methodName);
         return;
       }
@@ -262,114 +395,12 @@ public class SummaryCreator extends ListenerAdapter {
       if(!recorded.contains(methodName)) {
         recording.add(methodName);
       }
-      if(container.hasSummary(methodName)) {
-        //MethodContext currentContext =  contextMap.get(methodName);
-        MethodCounter counter = counterMap.get(methodName);
-        counter.attemptedMatchCount++;
-
-        if(counter.failedMatchCount > 60) {
-          blackList.add(methodName);
-          return;
-        }
-        // we have failed to match the context more than 10 times in a row
-        // bad(?) heuristic, similar contexts will occur close to each other
-        /*
-        if(counter.attemptedMatchCount > 10) {
-          recorded.remove(methodName);
-          recording.add(methodName);
-          modificationMap.put(methodName, new MethodModifications(args));
-          if(executedInsn instanceof INVOKESTATIC) {
-            contextMap.put(methodName, new MethodContext(args, runningThreads==1));
-          }else{  
-            contextMap.put(methodName, new MethodContext(ti.getElementInfo(call.getLastObjRef()), args, runningThreads==1));
-          }
-          counter.attemptedMatchCount = 0;
-          return;
-        }*/
-        MethodSummary summary;
-        if(executedInsn instanceof INVOKESTATIC) {
-          summary = container.hasMatchingContext(methodName, call.getArgumentValues(ti), runningThreads==1);
-        }else{
-          summary = container.hasMatchingContext(methodName, ti.getElementInfo(call.getLastObjRef()),call.getArgumentValues(ti),runningThreads==1);
-        }
-
-        if(summary == null) {
-          counter.failedMatchCount++;
-          return;
-        }
-        counter.attemptedMatchCount = 0;
-        counter.argsMatchCount++;
-
-        // We need to ensure that context information
-        // propagates down to other methods that might be recording
-        for(String r : recording) {
-          contextMap.get(r).addContextFields(summary.context);
-        }
-
-
-        // ideally none of the targets should have been frozen
-        // but it seems like they are in log4j1 - fixed
-        if(!summary.mods.canModifyAllTargets()) {
-          return;
-        }
-
-        // TODO: Get class in a different way that doesn't break
-        if(!summary.context.getDependentStaticFields().isEmpty()) {
-          return;
-        }
-
-        summary.mods.applyModifications();
-        // at this point we want to make sure that we don't create another summary
-        // like the one we just applied
-        contextMap.remove(methodName);
-        modificationMap.remove(methodName);
-        recording.remove(methodName);
-
-        // find the return instruction
-        Instruction nextInstruction = mi.getInstruction(mi.getNumberOfInstructions()-1);
-        if(nextInstruction instanceof NATIVERETURN) {
-          return;
-        }
-        // no return value necessary
-        if(nextInstruction instanceof RETURN) {
-          StackFrame frame = ti.getModifiableTopFrame();
-          frame.removeArguments(mi);
-          Object returnValue = summary.mods.getReturnValue();
-          assert(returnValue == null);
-          ti.skipInstruction(nextInstruction);
-          return;
-        }
-        
-
-        // prepare stack with correct return value
-        JVMReturnInstruction ret = (JVMReturnInstruction) nextInstruction;
-        StackFrame frame = ti.getModifiableTopFrame();
-        Object returnValue = summary.mods.getReturnValue();
-        if(returnValue instanceof Long) {
-          frame.pushLong((Long) returnValue);
-        } else if(returnValue instanceof Double) {
-          frame.pushDouble((Double) returnValue);
-        } else if(returnValue instanceof ElementInfo) {
-          frame.push(((ElementInfo) returnValue).getObjectRef());
-        } else {
-          if(returnValue == null){
-            frame.push(MJIEnv.NULL);
-          }else{
-            // this was failing before?
-            //if(frame.getSlots().length > 0) {
-              frame.push((Integer) returnValue);
-            //}
-          }
-        }
-
-        ti.skipInstruction(nextInstruction);
-      }
-
 
     } else if (executedInsn instanceof JVMReturnInstruction) {
       JVMReturnInstruction ret = (JVMReturnInstruction) executedInsn;
       mi = ret.getMethodInfo();
       String methodName = mi.getFullName();
+
       if(recording.contains(methodName)) {
         //recorded.add(methodName);
         modificationMap.get(methodName).setReturnValue(ret.getReturnValue(ti));
@@ -457,8 +488,41 @@ public class SummaryCreator extends ListenerAdapter {
         }
       }
     }
-  } 
+  }
 
+
+  @Override
+  public void threadInterrupted(VM vm, ThreadInfo interruptedThread) {
+    stopRecording();
+  }
+  @Override
+  public void objectLocked (VM vm, ThreadInfo currentThread, ElementInfo lockedObject) {
+    stopRecording();
+  }
+  @Override
+  public void objectUnlocked (VM vm, ThreadInfo currentThread, ElementInfo unlockedObject) {
+    stopRecording();
+  }
+  @Override
+  public void objectWait (VM vm, ThreadInfo currentThread, ElementInfo waitingObject) {
+    stopRecording();
+  }
+  @Override
+  public void objectNotify (VM vm, ThreadInfo currentThread, ElementInfo notifyingObject) {
+    stopRecording();
+  }
+  @Override
+  public void objectNotifyAll (VM vm, ThreadInfo currentThread, ElementInfo notifyingObject) {
+    stopRecording();
+  }
+  @Override
+  public void objectExposed (VM vm, ThreadInfo currentThread, ElementInfo fieldOwnerObject, ElementInfo exposedObject) {
+    stopRecording();
+  }
+  @Override
+  public void objectShared (VM vm, ThreadInfo currentThread, ElementInfo sharedObject) {
+    stopRecording();
+  }
   @Override
   public void choiceGeneratorRegistered (VM vm, ChoiceGenerator<?> nextCG, ThreadInfo currentThread, Instruction executedInstruction) {
     stopRecording();
@@ -471,7 +535,10 @@ public class SummaryCreator extends ListenerAdapter {
   public void choiceGeneratorAdvanced (VM vm, ChoiceGenerator<?> currentCG) {
     stopRecording();
   }
-
+  @Override
+  public void exceptionThrown(VM vm, ThreadInfo currentThread, ElementInfo thrownException) {
+    stopRecording();
+  }
   // Search listener part
 
   @Override
@@ -496,6 +563,7 @@ public class SummaryCreator extends ListenerAdapter {
     stopRecording();
     lastMi = null;
   }
+  
 
 
 
@@ -503,7 +571,7 @@ public class SummaryCreator extends ListenerAdapter {
   public void searchFinished(Search search) {
     out.println("----------------------------------- search finished");
     out.println();
-    //methodStatistics();
+    methodStatistics();
     //out.println(methodStatistics());
     //out.println(nativeMethodList());
   }
