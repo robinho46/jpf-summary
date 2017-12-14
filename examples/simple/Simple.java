@@ -12,7 +12,12 @@ public class Simple  {
 
     return 1;
   }
-
+ 
+  public static void test (String in) {
+    System.out.println(in);
+    String s2 = in + "asdw";
+  }
+ 
   public static void write(int arg) {
     arg += 5;
     x = arg;
@@ -51,7 +56,11 @@ public class Simple  {
       write(43);
     }
     read();
-
+    String s = "adoijwadpiowj";
+    test(s);
+    test(s);
+    test(s);
+    test(s);
     Particular obj = new Particular(33);
     obj.incrementY();
     takeThisObjectAndDoSomething(obj);

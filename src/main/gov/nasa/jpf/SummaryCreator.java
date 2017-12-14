@@ -100,13 +100,18 @@ public class SummaryCreator extends ListenerAdapter {
 
     //TEST-gov.nasa.jpf.test.java.concurrent.ExecutorServiceTest
     blackList.add("java.util.concurrent.locks.AbstractOwnableSynchronizer.setExclusiveOwnerThread(Ljava/lang/Thread;)V");
+    blackList.add("java.lang.String.valueOf(Ljava/lang/Object;)Ljava/lang/String;");
+
+    //blackList.add("toString");
+
 
     // pool1 orig - these summaries somehow reduced the state space by 4? 
     // could be because of the data-race?
     //blackList.add("org.apache.commons.pool.impl.CursorableLinkedList$Listable.next()Lorg/apache/commons/pool/impl/CursorableLinkedList$Listable;");
     //blackList.add("org.apache.commons.pool.impl.CursorableLinkedList$Listable.value()Ljava/lang/Object;");
     // Todo add classnames here
-    nativeWhiteList.add("append");
+    //nativeWhiteList.add("toString");
+    //nativeWhiteList.add("append");
     nativeWhiteList.add("desiredAssertionStatus");
     nativeWhiteList.add("print");
     nativeWhiteList.add("println");
@@ -162,38 +167,38 @@ public class SummaryCreator extends ListenerAdapter {
       return;
     }
 
+    //out.println(instructionToExecute);
     int runningThreads = vm.getThreadList().getCount().alive;
     ThreadInfo ti = currentThread;
 
     if (instructionToExecute instanceof JVMInvokeInstruction) {
       JVMInvokeInstruction call = (JVMInvokeInstruction) instructionToExecute;
       mi = call.getInvokedMethod();
-
-      
       if(mi == null) {
         return;
       }
-      assert( mi != null);
       String methodName = call.getInvokedMethod().getFullName();
       if(container.hasSummary(methodName)) {
         MethodCounter counter = counterMap.get(methodName);
         counter.attemptedMatchCount++;
+        if(counter.attemptedMatchCount > 60) {
+          return;
+        }
 
         MethodSummary summary;
         if(instructionToExecute instanceof INVOKESTATIC) {
           summary = container.hasMatchingContext(methodName, call.getArgumentValues(ti), runningThreads==1);
         }else{
-          Object[] args;
           StackFrame top = ti.getTopFrame();
           byte[] argTypes = mi.getArgumentTypes();
-          args = top.getArgumentsValues(ti,argTypes);
+          Object[] args = top.getArgumentsValues(ti,argTypes);
+
           // call.getArgumentValues() throws NPE here in log4j2 orig
           // at line 890 of StackFrame, which is strange cause this is executing the same code
           summary = container.hasMatchingContext(methodName, ti.getElementInfo(top.peek(mi.getArgumentsSize()-1)), args,runningThreads==1);
         }
 
         if(summary == null) {
-
           counter.failedMatchCount++;
           return;
         }
@@ -216,7 +221,8 @@ public class SummaryCreator extends ListenerAdapter {
         for(String r : recording) {
           contextMap.get(r).addContextFields(summary.context);
         }
-
+    
+        counterMap.get(methodName).totalCalls++;
         summary.mods.applyModifications();
         //out.println("applied summary for " + methodName);
         //out.println(summary.context);
@@ -236,33 +242,51 @@ public class SummaryCreator extends ListenerAdapter {
         StackFrame frame = ti.getModifiableTopFrame();
         frame.removeArguments(mi);
 
-        if(mi.getReturnType().equals("V")) {
+        String returnType = mi.getReturnType();
+        if(returnType.equals("V")) {
           ti.skipInstruction(nextInstruction);
           return;
         }
 
         // prepare stack with correct return value
         Object returnValue = summary.mods.getReturnValue();
-        if(returnValue instanceof Long) {
+        out.println(mi.getReturnType());
+        out.println(returnValue);
+        if(returnType.equals("J")) {
           frame.pushLong((Long) returnValue);
-        } else if(returnValue instanceof Double) {
+        } else if(returnType.equals("D")) {
           frame.pushDouble((Double) returnValue);
-        } else if(returnValue instanceof Float) {
+        } else if(returnType.equals("F")) {
           frame.pushFloat((Float) returnValue);
-        } else if(returnValue instanceof ElementInfo) {
-          frame.pushRef(((ElementInfo) returnValue).getObjectRef());
-        } else if(returnValue instanceof Boolean) {
-          boolean flag = (Boolean) returnValue;
-          if(flag) {
-            frame.push(0);
+        } else if(returnType.equals("S")) {
+            frame.push((Integer) returnValue);
+        } else if(returnType.equals("I")) {
+            frame.push((Integer) returnValue);
+        } else if(returnType.equals("Z")) {
+          if(returnValue instanceof Boolean) {
+            boolean flag = (Boolean) returnValue;
+            if(flag) {
+              frame.push(0);
+            } else {
+              frame.push(1);
+            }
           } else {
-            frame.push(1);
+            frame.push((Integer) returnValue);
           }
         } else {
           if(returnValue == null){
-            frame.push(MJIEnv.NULL);
-          }else{
-            frame.push((Integer) returnValue);
+            frame.pushRef(MJIEnv.NULL);
+          } else if(returnValue instanceof ElementInfo) {
+            ElementInfo returnObject = (ElementInfo) returnValue;
+            if(vm.getElementInfo(returnObject.getObjectRef()) == null) {
+              return;
+            }
+            frame.pushRef(returnObject.getObjectRef());
+          } else {
+            if(vm.getElementInfo((Integer) returnValue) == null) {
+              return;
+            }
+            frame.pushRef((Integer) returnValue);
           }
         }
         ti.skipInstruction(nextInstruction);
@@ -274,12 +298,6 @@ public class SummaryCreator extends ListenerAdapter {
   @Override
   public void instructionExecuted (VM vm, ThreadInfo ti, Instruction nextInsn, Instruction executedInsn) {
     MethodInfo mi = executedInsn.getMethodInfo();
-    if(skipped) {
-      //out.println(executedInsn);
-      //out.println(nextInsn);
-      skipped = false;
-      return;
-    }
     if (skip) {
       if (mi == miMain) {
         skip = false;
@@ -290,6 +308,12 @@ public class SummaryCreator extends ListenerAdapter {
 
     //out.println(executedInsn);
     if (executedInsn instanceof JVMInvokeInstruction) {
+      if(skipped) {
+        //out.println(executedInsn);
+        //out.println(nextInsn);
+        skipped = false;
+        return;
+      }
       JVMInvokeInstruction call = (JVMInvokeInstruction)executedInsn;
       mi = call.getInvokedMethod(ti);
       
@@ -338,8 +362,10 @@ public class SummaryCreator extends ListenerAdapter {
       // getName() is used for the manually entered names
       if(blackList.contains(methodName) 
           || blackList.contains(mi.getName())
-          || methodName.contains("reflect")
-          || methodName.contains("$")) {
+          //|| methodName.contains("$")
+          || methodName.contains("$$")
+          //|| methodName.contains("Verify")
+          || methodName.contains("reflect")) {
         stopRecording(methodName);
         return;
       }
@@ -550,7 +576,7 @@ public class SummaryCreator extends ListenerAdapter {
   public void searchFinished(Search search) {
     out.println("----------------------------------- search finished");
     out.println();
-    methodStatistics();
+    //methodStatistics();
     //out.println(methodStatistics());
     //out.println(nativeMethodList());
   }
@@ -591,16 +617,14 @@ public class SummaryCreator extends ListenerAdapter {
         continue;
       }
 
-      // this holds except for our silly heuristic which may mess it up
-      //assert(!(counter.interrupted() && counter.recorded));
-      if( counter.totalCalls-1 != 0 && (counter.recorded || counter.interruptedByNativeCall)) {
+      if( counter.totalCalls-1 != 0) { //&& (counter.recorded || counter.interruptedByNativeCall)) {
         methodStats.append("{\"methodName\":\"").append(methodName).append("\"");
         methodStats.append(", \"counter\":").append(counter);
         if(counter.recorded ) {
           recordedMethods++;
-          methodStats.append(", \"context\":").append(context);
+          //methodStats.append(", \"context\":").append(context);
           //out.println("matched " + counter.argsMatchCount + "/" + (counter.totalCalls-1) + " times");
-          methodStats.append(", \"mods\":").append(modificationMap.get(methodName));
+          //methodStats.append(", \"mods\":").append(modificationMap.get(methodName));
           savedInstructions += counter.argsMatchCount * counter.instructionCount; 
         }
         methodStats.append("},");

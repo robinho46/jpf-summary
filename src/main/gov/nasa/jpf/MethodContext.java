@@ -24,6 +24,7 @@ import gov.nasa.jpf.vm.ClassInfo;
 import gov.nasa.jpf.vm.MethodInfo;
 import gov.nasa.jpf.vm.ThreadInfo;
 import gov.nasa.jpf.vm.ElementInfo;
+import gov.nasa.jpf.vm.Fields;
 import gov.nasa.jpf.vm.FieldInfo;
 import gov.nasa.jpf.vm.LocalVarInfo;
 import gov.nasa.jpf.vm.Instruction;
@@ -74,6 +75,14 @@ public class MethodContext {
   public MethodContext(Object[] args, boolean runningAlone) {
     this.runningAlone = runningAlone;
     params = args;
+    for(int i=0; i<params.length; i++) {
+      if(params[i] instanceof ElementInfo) {
+        ElementInfo ei = (ElementInfo)params[i];
+        if(ei.isStringObject()) {
+          params[i] = ei.asString();
+        }
+      }
+    }
     dependentFields = new HashMap<>();
     dependentStaticFields = new HashMap<>();
   }
@@ -82,6 +91,14 @@ public class MethodContext {
     this.runningAlone = runningAlone;
     this._this = _this;
     params = args;
+    for(int i=0; i<params.length; i++) {
+      if(params[i] instanceof ElementInfo) {
+        ElementInfo ei = (ElementInfo)params[i];
+        if(ei.isStringObject()) {
+          params[i] = ei.asString();
+        }
+      }
+    }
     dependentFields = new HashMap<>();
     dependentStaticFields = new HashMap<>();
   }
@@ -148,12 +165,12 @@ public class MethodContext {
         }
       }
 
-      if(oldValue instanceof ElementInfo) {
-        ElementInfo old = (ElementInfo) oldValue;
+      if(oldValue instanceof String) {
         ElementInfo curr = (ElementInfo) currentValue;
-
+        if(curr.isStringObject() && curr.getType().equals("Ljava/lang/String;")) {
+          return curr.equalsString((String)oldValue);
+        }
       }
-
       return oldValue.equals(currentValue);
   }
 
@@ -193,11 +210,12 @@ public class MethodContext {
   private boolean argumentsMatch(Object[] args) {
     if(args.length != params.length) {
       // throw new exception?
+      assert(false);
       return false;
     }
 
     for(int i=0; i<args.length; i++) {
-      if(!valuesEqual(args[i],params[i]))
+      if(!valuesEqual(params[i],args[i]))
         return false;
     }
 
@@ -216,12 +234,20 @@ public class MethodContext {
     if(source.isShared()) {
       System.out.println("READING FROM SHARED OBJECT " + source );
     }
-    assert(!source.isShared());
- 
+    assert(!source.isShared());/*
+    if(value instanceof ElementInfo) {
+      ElementInfo ei = (ElementInfo) value;
+      if(ei.isStringObject()) {
+        value = ei.asString();
+        System.out.println("Saving value as " + value);
+      }
+    }*/
+
     dependentFields.put((fieldName + source.toString()).hashCode(), new DependentFieldData(fieldName, source, value));
   }
 
   public void addStaticField(String fieldName, ClassInfo ci, Object value) {
+
     dependentStaticFields.put(fieldName, new DependentFieldData(fieldName, ci, value));
   }
 
