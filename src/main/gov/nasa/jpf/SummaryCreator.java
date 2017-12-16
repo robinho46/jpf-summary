@@ -97,13 +97,26 @@ public class SummaryCreator extends ListenerAdapter {
     if (skipInit) {
       skip = true;
     }
+    recorded = new HashSet<>();
+    recording = new HashSet<>();
+    blackList = new HashSet<>();
+    nativeWhiteList = new HashSet<>();
+
+    container = new SummaryContainer();
+    contextMap = new HashMap<>();
+    counterMap = new HashMap<>();
+    modificationMap = new HashMap<>();
 
     //TEST-gov.nasa.jpf.test.java.concurrent.ExecutorServiceTest
     blackList.add("java.util.concurrent.locks.AbstractOwnableSynchronizer.setExclusiveOwnerThread(Ljava/lang/Thread;)V");
-    blackList.add("java.lang.String.valueOf(Ljava/lang/Object;)Ljava/lang/String;");
+    
+    // Test gov.nasa.jpf.test.mc.basic.SearchMultipleTest
+    //blackList.add("java.lang.String.valueOf(Ljava/lang/Object;)Ljava/lang/String;");
 
-    //blackList.add("toString");
-
+    // Test gov.nasa.jpf.test.mc.basic.AttrsTest
+    // This might actually be "OK", 
+    // if breaking attributes only affects other extensions, not core?
+    blackList.add("java.lang.Integer.intValue()I");
 
     // pool1 orig - these summaries somehow reduced the state space by 4? 
     // could be because of the data-race?
@@ -122,6 +135,38 @@ public class SummaryCreator extends ListenerAdapter {
     out.println("~Summaries active~");
   }
 
+  public void reinitialise() {
+    recorded = new HashSet<>();
+    recording = new HashSet<>();
+    blackList = new HashSet<>();
+    nativeWhiteList = new HashSet<>();
+
+    container = new SummaryContainer();
+    contextMap = new HashMap<>();
+    counterMap = new HashMap<>();
+    modificationMap = new HashMap<>();
+
+    //TEST-gov.nasa.jpf.test.java.concurrent.ExecutorServiceTest
+    blackList.add("java.util.concurrent.locks.AbstractOwnableSynchronizer.setExclusiveOwnerThread(Ljava/lang/Thread;)V");
+    
+    // Test gov.nasa.jpf.test.mc.basic.AttrsTest
+    // This might actually be "OK", 
+    // if breaking attributes only affects other extensions, not core?
+    blackList.add("java.lang.Integer.intValue()I");
+
+    // pool1 orig - these summaries somehow reduced the state space by 4? 
+    // could be because of the data-race?
+    //blackList.add("org.apache.commons.pool.impl.CursorableLinkedList$Listable.next()Lorg/apache/commons/pool/impl/CursorableLinkedList$Listable;");
+    //blackList.add("org.apache.commons.pool.impl.CursorableLinkedList$Listable.value()Ljava/lang/Object;");
+    // Todo add classnames here
+    //nativeWhiteList.add("toString");
+    //nativeWhiteList.add("append");
+    nativeWhiteList.add("desiredAssertionStatus");
+    nativeWhiteList.add("print");
+    nativeWhiteList.add("println");
+    nativeWhiteList.add("min");
+    nativeWhiteList.add("max");
+  }
 
   public void stopRecording(String reason) {
     for(String r : recording) {
@@ -250,9 +295,10 @@ public class SummaryCreator extends ListenerAdapter {
 
         // prepare stack with correct return value
         Object returnValue = summary.mods.getReturnValue();
-        out.println(mi.getReturnType());
-        out.println(returnValue);
-        if(returnType.equals("J")) {
+
+        if (returnValue == null) {
+          frame.pushRef(MJIEnv.NULL);
+        } else if(returnType.equals("J")) {
           frame.pushLong((Long) returnValue);
         } else if(returnType.equals("D")) {
           frame.pushDouble((Double) returnValue);
@@ -274,16 +320,14 @@ public class SummaryCreator extends ListenerAdapter {
             frame.push((Integer) returnValue);
           }
         } else {
-          if(returnValue == null){
-            frame.pushRef(MJIEnv.NULL);
-          } else if(returnValue instanceof ElementInfo) {
+          if(returnValue instanceof ElementInfo) {
             ElementInfo returnObject = (ElementInfo) returnValue;
-            if(vm.getElementInfo(returnObject.getObjectRef()) == null) {
-              return;
-            }
             frame.pushRef(returnObject.getObjectRef());
           } else {
-            if(vm.getElementInfo((Integer) returnValue) == null) {
+            if ((Integer) returnValue == MJIEnv.NULL) {
+              return;
+            }
+            if(vm.getElementInfo((Integer) returnValue) == null ) {
               return;
             }
             frame.pushRef((Integer) returnValue);
@@ -308,9 +352,9 @@ public class SummaryCreator extends ListenerAdapter {
 
     //out.println(executedInsn);
     if (executedInsn instanceof JVMInvokeInstruction) {
+      // skipping in executeInstruction still results in
+      // this instructionExecuted notification
       if(skipped) {
-        //out.println(executedInsn);
-        //out.println(nextInsn);
         skipped = false;
         return;
       }
@@ -345,15 +389,6 @@ public class SummaryCreator extends ListenerAdapter {
 
       if(mi.getName().equals("<clinit>")) {
         stopRecording("<clinit>");
-        return;
-      }
-
-      
-      // This might actually be "OK", 
-      // if breaking attributes only affects other extensions, not core?
-      // Test-gov.nasa.jpf.test.mc.basic.AttrsTest
-      if(methodName.equals("java.lang.Integer.intValue()I")) {
-        stopRecording("java.lang.Integer.intValue()I");
         return;
       }
 
@@ -549,6 +584,7 @@ public class SummaryCreator extends ListenerAdapter {
   @Override
   public void searchStarted(Search search) {
     out.println("----------------------------------- search started");
+    reinitialise();
     if (skipInit) {
       ThreadInfo tiCurrent = ThreadInfo.getCurrentThread();
       miMain = tiCurrent.getEntryMethod();

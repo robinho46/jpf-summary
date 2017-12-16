@@ -167,7 +167,10 @@ public class MethodContext {
 
       if(oldValue instanceof String) {
         ElementInfo curr = (ElementInfo) currentValue;
-        if(curr.isStringObject() && curr.getType().equals("Ljava/lang/String;")) {
+        if(curr == null) {
+          return false;
+        }
+        if(curr.isStringObject() ) {
           return curr.equalsString((String)oldValue);
         }
       }
