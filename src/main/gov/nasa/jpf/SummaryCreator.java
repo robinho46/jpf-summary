@@ -97,39 +97,7 @@ public class SummaryCreator extends ListenerAdapter {
     if (skipInit) {
       skip = true;
     }
-    recorded = new HashSet<>();
-    recording = new HashSet<>();
-    blackList = new HashSet<>();
-    nativeWhiteList = new HashSet<>();
-
-    container = new SummaryContainer();
-    contextMap = new HashMap<>();
-    counterMap = new HashMap<>();
-    modificationMap = new HashMap<>();
-
-    //TEST-gov.nasa.jpf.test.java.concurrent.ExecutorServiceTest
-    blackList.add("java.util.concurrent.locks.AbstractOwnableSynchronizer.setExclusiveOwnerThread(Ljava/lang/Thread;)V");
-    
-    // Test gov.nasa.jpf.test.mc.basic.SearchMultipleTest
-    //blackList.add("java.lang.String.valueOf(Ljava/lang/Object;)Ljava/lang/String;");
-
-    // Test gov.nasa.jpf.test.mc.basic.AttrsTest
-    // This might actually be "OK", 
-    // if breaking attributes only affects other extensions, not core?
-    blackList.add("java.lang.Integer.intValue()I");
-
-    // pool1 orig - these summaries somehow reduced the state space by 4? 
-    // could be because of the data-race?
-    //blackList.add("org.apache.commons.pool.impl.CursorableLinkedList$Listable.next()Lorg/apache/commons/pool/impl/CursorableLinkedList$Listable;");
-    //blackList.add("org.apache.commons.pool.impl.CursorableLinkedList$Listable.value()Ljava/lang/Object;");
-    // Todo add classnames here
-    //nativeWhiteList.add("toString");
-    //nativeWhiteList.add("append");
-    nativeWhiteList.add("desiredAssertionStatus");
-    nativeWhiteList.add("print");
-    nativeWhiteList.add("println");
-    nativeWhiteList.add("min");
-    nativeWhiteList.add("max");
+    reinitialise();
 
     out = new PrintWriter(System.out, true);
     out.println("~Summaries active~");
@@ -149,6 +117,10 @@ public class SummaryCreator extends ListenerAdapter {
     //TEST-gov.nasa.jpf.test.java.concurrent.ExecutorServiceTest
     blackList.add("java.util.concurrent.locks.AbstractOwnableSynchronizer.setExclusiveOwnerThread(Ljava/lang/Thread;)V");
     
+    // Test gov.nasa.jpf.test.mc.basic.SearchMultipleTest
+    blackList.add("java.lang.String.valueOf(Ljava/lang/Object;)Ljava/lang/String;");
+    blackList.add("valueOf");
+    blackList.add("toString");
     // Test gov.nasa.jpf.test.mc.basic.AttrsTest
     // This might actually be "OK", 
     // if breaking attributes only affects other extensions, not core?
@@ -158,9 +130,9 @@ public class SummaryCreator extends ListenerAdapter {
     // could be because of the data-race?
     //blackList.add("org.apache.commons.pool.impl.CursorableLinkedList$Listable.next()Lorg/apache/commons/pool/impl/CursorableLinkedList$Listable;");
     //blackList.add("org.apache.commons.pool.impl.CursorableLinkedList$Listable.value()Ljava/lang/Object;");
+
     // Todo add classnames here
-    //nativeWhiteList.add("toString");
-    //nativeWhiteList.add("append");
+    nativeWhiteList.add("matches");
     nativeWhiteList.add("desiredAssertionStatus");
     nativeWhiteList.add("print");
     nativeWhiteList.add("println");
@@ -190,6 +162,9 @@ public class SummaryCreator extends ListenerAdapter {
 
   public void stopRecording() {
     for(String r : recording) {
+      //contextMap.remove(r);
+      //modificationMap.remove(r);
+      counterMap.get(r).reasonForInterruption = "transition or lock";
       if(recorded.contains(r)) {
         assert(false);
       }
@@ -226,7 +201,7 @@ public class SummaryCreator extends ListenerAdapter {
       if(container.hasSummary(methodName)) {
         MethodCounter counter = counterMap.get(methodName);
         counter.attemptedMatchCount++;
-        if(counter.attemptedMatchCount > 60) {
+        if(counter.attemptedMatchCount > 600) {
           return;
         }
 
@@ -269,9 +244,9 @@ public class SummaryCreator extends ListenerAdapter {
     
         counterMap.get(methodName).totalCalls++;
         summary.mods.applyModifications();
-        //out.println("applied summary for " + methodName);
-        //out.println(summary.context);
-        //out.println(summary.mods);
+        out.println("applied summary for " + methodName);
+        out.println(summary.context);
+        out.println(summary.mods);
 
         // at this point we want to make sure that we don't create another summary
         // like the one we just applied
@@ -579,8 +554,8 @@ public class SummaryCreator extends ListenerAdapter {
   public void exceptionThrown(VM vm, ThreadInfo currentThread, ElementInfo thrownException) {
     stopRecording();
   }
-  // Search listener part
 
+  // Search listener part
   @Override
   public void searchStarted(Search search) {
     out.println("----------------------------------- search started");
@@ -613,7 +588,7 @@ public class SummaryCreator extends ListenerAdapter {
     out.println("----------------------------------- search finished");
     out.println();
     //methodStatistics();
-    //out.println(methodStatistics());
+    out.println(methodStatistics());
     //out.println(nativeMethodList());
   }
 
@@ -649,9 +624,6 @@ public class SummaryCreator extends ListenerAdapter {
       MethodContext context = contextMap.get(methodName);
       uniqueMethods++;
       assert(counter != null);
-      if(!(counter.recorded || counter.interrupted())) {
-        continue;
-      }
 
       if( counter.totalCalls-1 != 0) { //&& (counter.recorded || counter.interruptedByNativeCall)) {
         methodStats.append("{\"methodName\":\"").append(methodName).append("\"");

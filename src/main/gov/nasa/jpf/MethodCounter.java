@@ -53,8 +53,7 @@ public class MethodCounter {
     str += ",\"recorded\":"+recorded;
     str += ",\"interruptedByTransition\":" + interruptedByTransition;
     str += ",\"interruptedByNativeCall\":" + interruptedByNativeCall;
-    if(interruptedByNativeCall)
-      str += ",\"interruption\":\"" + reasonForInterruption + "\"";
+    str += ",\"interruption\":\"" + reasonForInterruption + "\"";
     str += "}";
     return str;
   }
