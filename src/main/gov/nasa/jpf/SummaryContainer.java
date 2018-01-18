@@ -31,7 +31,7 @@ import gov.nasa.jpf.vm.ElementInfo;
 public class SummaryContainer {
   private Map<String,List<MethodSummary>> container;
   // the maximum number of contexts which we capture
-  private static final int CAPACITY = 50;
+  private static final int CAPACITY = 100;
   public SummaryContainer() {
     container = new HashMap<>();
   }

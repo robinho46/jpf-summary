@@ -30,17 +30,9 @@ public class MethodCounter {
     argsMatchCount = 0;
     attemptedMatchCount = 0;
     failedMatchCount = 0;
-
-    interruptedByOther = false;
-    interruptedByNativeCall = false;
-    interruptedByTransition = false;
     reasonForInterruption = "";
-
   }
 
-  public boolean interrupted() {
-    return interruptedByNativeCall || interruptedByTransition || interruptedByOther;
-  }
 
   @Override
   public String toString() {
@@ -51,8 +43,6 @@ public class MethodCounter {
     //str += ",\"writeCount\":"+writeCount;
     str += ",\"instructionCount\":" + instructionCount;
     str += ",\"recorded\":"+recorded;
-    str += ",\"interruptedByTransition\":" + interruptedByTransition;
-    str += ",\"interruptedByNativeCall\":" + interruptedByNativeCall;
     str += ",\"interruption\":\"" + reasonForInterruption + "\"";
     str += "}";
     return str;
@@ -66,12 +56,6 @@ public class MethodCounter {
       str += "\nwriteCount=" + writeCount;
 
     str += "\ninstructionCount=" + instructionCount;
-
-    if(interruptedByNativeCall){
-      str += "\nINTERRUPTED BY " + reasonForInterruption;
-    } else if(interruptedByTransition) {
-      str += "\nINTERRUPTED BY TRANSITION";
-    }
 
     if(argsMatchCount != 0) {
       str += "\nArgs matched " + argsMatchCount + " times";
@@ -90,15 +74,11 @@ public class MethodCounter {
   // true if it ever finishes a call-return
   // withing the same transition
   public boolean recorded; 
-  public boolean interruptedByNativeCall;
-  public boolean interruptedByTransition;
-  public boolean interruptedByOther;
   public String reasonForInterruption;
 
   public int readCount;
   public int writeCount;
   public int instructionCount;
-
 
   public int argsMatchCount;
   public int attemptedMatchCount;

@@ -114,13 +114,19 @@ public class SummaryCreator extends ListenerAdapter {
     counterMap = new HashMap<>();
     modificationMap = new HashMap<>();
 
+    blackList.add("java.io.Bits.getShort([BI)S");
+    blackList.add("java.io.Bits.getLong([BI)J");
+    blackList.add("java.lang.Long.longValue()J");
+
+
     //TEST-gov.nasa.jpf.test.java.concurrent.ExecutorServiceTest
     blackList.add("java.util.concurrent.locks.AbstractOwnableSynchronizer.setExclusiveOwnerThread(Ljava/lang/Thread;)V");
     
     // Test gov.nasa.jpf.test.mc.basic.SearchMultipleTest
     blackList.add("java.lang.String.valueOf(Ljava/lang/Object;)Ljava/lang/String;");
-    blackList.add("valueOf");
     blackList.add("toString");
+
+
     // Test gov.nasa.jpf.test.mc.basic.AttrsTest
     // This might actually be "OK", 
     // if breaking attributes only affects other extensions, not core?
@@ -142,17 +148,11 @@ public class SummaryCreator extends ListenerAdapter {
 
   public void stopRecording(String reason) {
     for(String r : recording) {
-      if(recorded.contains(r)) {
-        assert(false);
-      }
+      assert(!recorded.contains(r));
 
       MethodCounter counter = counterMap.get(r);
-      if(reason.contains("()")) {
-        counter.interruptedByNativeCall = true;
-      } else {
-        counter.interruptedByOther = true;
-      }
-      counter.reasonForInterruption = reason;
+      if(counter.reasonForInterruption.equals(""))
+        counter.reasonForInterruption = reason;
       //out.println("BLACKLISTED " + r);
       blackList.add(r);
     }
@@ -162,15 +162,11 @@ public class SummaryCreator extends ListenerAdapter {
 
   public void stopRecording() {
     for(String r : recording) {
+      assert(!recorded.contains(r));
       //contextMap.remove(r);
       //modificationMap.remove(r);
       counterMap.get(r).reasonForInterruption = "transition or lock";
-      if(recorded.contains(r)) {
-        assert(false);
-      }
       MethodCounter counter = counterMap.get(r);
-      counter.interruptedByTransition = true; 
-      //out.println("BLACKLISTED " + r);
 
       blackList.add(r);
     }
@@ -180,16 +176,14 @@ public class SummaryCreator extends ListenerAdapter {
 
 
   @Override 
-  public void executeInstruction(VM vm, ThreadInfo currentThread, Instruction instructionToExecute) { 
+  public void executeInstruction(VM vm, ThreadInfo ti, Instruction instructionToExecute) { 
     MethodInfo mi = instructionToExecute.getMethodInfo();
     
     if(skip || mi == null) {
       return;
     }
 
-    //out.println(instructionToExecute);
     int runningThreads = vm.getThreadList().getCount().alive;
-    ThreadInfo ti = currentThread;
 
     if (instructionToExecute instanceof JVMInvokeInstruction) {
       JVMInvokeInstruction call = (JVMInvokeInstruction) instructionToExecute;
@@ -201,9 +195,9 @@ public class SummaryCreator extends ListenerAdapter {
       if(container.hasSummary(methodName)) {
         MethodCounter counter = counterMap.get(methodName);
         counter.attemptedMatchCount++;
-        if(counter.attemptedMatchCount > 600) {
+        /*if(counter.attemptedMatchCount > 300) {
           return;
-        }
+        }*/
 
         MethodSummary summary;
         if(instructionToExecute instanceof INVOKESTATIC) {
@@ -244,9 +238,9 @@ public class SummaryCreator extends ListenerAdapter {
     
         counterMap.get(methodName).totalCalls++;
         summary.mods.applyModifications();
-        out.println("applied summary for " + methodName);
-        out.println(summary.context);
-        out.println(summary.mods);
+        //out.println("applied summary for " + methodName);
+        //out.println(summary.context);
+        //out.println(summary.mods);
 
         // at this point we want to make sure that we don't create another summary
         // like the one we just applied
@@ -258,7 +252,6 @@ public class SummaryCreator extends ListenerAdapter {
         Instruction nextInstruction = call.getNext();
         skipped = true;
         
-        int nArgs = mi.getArgumentsSize();
         StackFrame frame = ti.getModifiableTopFrame();
         frame.removeArguments(mi);
 
@@ -352,6 +345,11 @@ public class SummaryCreator extends ListenerAdapter {
       }
       counterMap.get(methodName).totalCalls++;
 
+
+      if(!recorded.contains(methodName)) {
+        recording.add(methodName);
+      }
+
       if(mi.getReturnTypeCode() == Types.T_ARRAY) {
         stopRecording("array type");
         return;
@@ -385,11 +383,11 @@ public class SummaryCreator extends ListenerAdapter {
       Object[] args = call.getArgumentValues(ti);
       if(!contextMap.containsKey(methodName)) {
         byte[] types = mi.getArgumentTypes();
-        for(byte type : types) {
+        for(byte type : types) {/*
           if(type == Types.T_ARRAY) {
             stopRecording("array argument");
             return;
-          }
+          }*/
         }
 
         if(executedInsn instanceof INVOKESTATIC) {
@@ -407,9 +405,6 @@ public class SummaryCreator extends ListenerAdapter {
         modificationMap.put(methodName, new MethodModifications(args));
       }
 
-      if(!recorded.contains(methodName)) {
-        recording.add(methodName);
-      }
 
     } else if (executedInsn instanceof JVMReturnInstruction) {
       JVMReturnInstruction ret = (JVMReturnInstruction) executedInsn;
@@ -436,7 +431,7 @@ public class SummaryCreator extends ListenerAdapter {
         //out.println("CALLED WHITELISTED NATIVE FUNCTION " + mi.getFullName());
         return;
       }
-      stopRecording(methodName);
+      stopRecording("native method");
     } else if(executedInsn instanceof FieldInstruction) {
       String methodName = mi.getFullName();
       if(!recording.contains(methodName))
@@ -485,10 +480,10 @@ public class SummaryCreator extends ListenerAdapter {
           stopRecording("shared field write");
           return;
         }
-
+        /*
         if(fi.getType().charAt(fi.getType().length()-1) == ']') {
           stopRecording("array operation");
-        }
+        }*/
 
         if(finsn instanceof PUTFIELD) {
           for(String stackMethodName : recording) {
@@ -592,60 +587,32 @@ public class SummaryCreator extends ListenerAdapter {
     //out.println(nativeMethodList());
   }
 
-  public String nativeMethodList() {
-    StringBuilder nativeMethods = new StringBuilder();
-
-    nativeMethods.append("{\"native-method-list\":[");
-    for(String mName : counterMap.keySet()) {
-      MethodCounter counter = counterMap.get(mName);
-      if(counter.interruptedByTransition) 
-        continue;
-
-      nativeMethods.append("\"").append(counter.reasonForInterruption).append("\",");
-    }
-
-    nativeMethods.deleteCharAt(nativeMethods.length()-1);
-    nativeMethods.append("]}");
-    return nativeMethods.toString();
-  }
 
   public String methodStatistics() {
     int uniqueMethods = 0;
     int recordedMethods = 0;
-    int transitionInterrupts = 0;
-    int nativeMethodInterrupts = 0;
     int savedInstructions = 0;
 
     StringBuilder methodStats = new StringBuilder();
     methodStats.append("{\"methodStats\":[ ");
 
     for(String methodName : counterMap.keySet()) {
+      /* debugging, trying to look at the contexts of this method
+      if(methodName.equals("java.util.LinkedList.size()I")) {
+        container.get(methodName);
+      }*/
       MethodCounter counter = counterMap.get(methodName);
-      MethodContext context = contextMap.get(methodName);
       uniqueMethods++;
       assert(counter != null);
 
-      if( counter.totalCalls-1 != 0) { //&& (counter.recorded || counter.interruptedByNativeCall)) {
-        methodStats.append("{\"methodName\":\"").append(methodName).append("\"");
-        methodStats.append(", \"counter\":").append(counter);
-        if(counter.recorded ) {
-          recordedMethods++;
-          //methodStats.append(", \"context\":").append(context);
-          //out.println("matched " + counter.argsMatchCount + "/" + (counter.totalCalls-1) + " times");
-          //methodStats.append(", \"mods\":").append(modificationMap.get(methodName));
-          savedInstructions += counter.argsMatchCount * counter.instructionCount; 
-        }
-        methodStats.append("},");
-
+      methodStats.append(counter);//.append("{ \"stats\":").append(counter);
+      if(counter.recorded ) {
+        recordedMethods++;
+        savedInstructions += counter.argsMatchCount * counter.instructionCount; 
       }
-
-      if(counter.interruptedByNativeCall){
-        nativeMethodInterrupts++;
-      }
-      if(counter.interruptedByTransition){
-        transitionInterrupts++;
-      }
+      methodStats.append(",");
     }
+    
     methodStats.deleteCharAt(methodStats.length()-1);
     methodStats.append("]}");
     out.println("Saved " + savedInstructions + " instructions");
