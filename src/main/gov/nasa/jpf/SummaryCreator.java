@@ -230,10 +230,11 @@ public class SummaryCreator extends ListenerAdapter {
           return;
         }
 
-        // We need to ensure that context information
+        // We need to ensure that context and modification information
         // propagates down to other methods that might be recording
         for(String r : recording) {
           contextMap.get(r).addContextFields(summary.context);
+          modificationMap.get(r).addModificationFields(summary.mods);
         }
     
         counterMap.get(methodName).totalCalls++;
@@ -374,7 +375,7 @@ public class SummaryCreator extends ListenerAdapter {
           || methodName.contains("$$")
           //|| methodName.contains("Verify")
           || methodName.contains("reflect")) {
-        stopRecording(methodName);
+        stopRecording("blacklisted");
         return;
       }
 
@@ -444,7 +445,7 @@ public class SummaryCreator extends ListenerAdapter {
         counter.readCount++;
         // TODO: Fix this - see comment below
         if(finsn instanceof GETSTATIC) {
-          stopRecording("Static read");
+          stopRecording("static read");
           return;
         }
         // this breaks for static, sometimes, presumably the class is not initialized?
@@ -584,38 +585,30 @@ public class SummaryCreator extends ListenerAdapter {
     out.println();
     //methodStatistics();
     out.println(methodStatistics());
-    //out.println(nativeMethodList());
   }
 
 
   public String methodStatistics() {
     int uniqueMethods = 0;
     int recordedMethods = 0;
-    int savedInstructions = 0;
 
     StringBuilder methodStats = new StringBuilder();
     methodStats.append("{\"methodStats\":[ ");
 
     for(String methodName : counterMap.keySet()) {
-      /* debugging, trying to look at the contexts of this method
-      if(methodName.equals("java.util.LinkedList.size()I")) {
-        container.get(methodName);
-      }*/
       MethodCounter counter = counterMap.get(methodName);
       uniqueMethods++;
       assert(counter != null);
 
-      methodStats.append(counter);//.append("{ \"stats\":").append(counter);
+      methodStats.append(counter);
       if(counter.recorded ) {
         recordedMethods++;
-        savedInstructions += counter.argsMatchCount * counter.instructionCount; 
       }
       methodStats.append(",");
     }
     
     methodStats.deleteCharAt(methodStats.length()-1);
     methodStats.append("]}");
-    out.println("Saved " + savedInstructions + " instructions");
     return methodStats.toString();
   }
 }

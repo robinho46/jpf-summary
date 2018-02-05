@@ -72,6 +72,14 @@ public class MethodModifications {
   }
 
 
+  public HashMap<Integer,ModifiedFieldData> getModifiedFields() {
+    return modifiedFields;
+  }
+
+  public HashMap<Integer,ModifiedFieldData> getModifiedStaticFields() {
+    return modifiedStaticFields;
+  }
+
   @Override
   public String toString() {
     // TODO: Distinguish between actually returning null, and void method
@@ -164,6 +172,25 @@ public class MethodModifications {
       ElementInfo targetClassObject = staticFieldData.classInfo.getModifiableStaticElementInfo();
       assert(targetClassObject != null);
       applyFieldUpdate(staticFieldData.fieldName, staticFieldData.type, targetClassObject, staticFieldData.newValue);
+    }
+  }
+
+  /**
+    * Takes another set of modifications and adds them to itself.
+    * Needed when a summary is applied during recording.
+    **/
+  public void addModificationFields(MethodModifications innerMods) {
+    HashMap<Integer,ModifiedFieldData> innerFields = innerMods.getModifiedFields();
+    HashMap<Integer,ModifiedFieldData> innerStaticFields = innerMods.getModifiedStaticFields();
+
+    for (Integer fieldHash : innerFields.keySet()) {
+      ModifiedFieldData fieldData = innerFields.get(fieldHash);
+      this.modifiedFields.put(fieldHash, fieldData);
+    }
+
+    for (Integer fieldHash : innerStaticFields.keySet()) {
+      ModifiedFieldData fieldData = innerStaticFields.get(fieldHash);
+      this.modifiedStaticFields.put(fieldHash, fieldData);
     }
   }
 
