@@ -153,7 +153,7 @@ public class SummaryCreator extends ListenerAdapter {
       MethodCounter counter = counterMap.get(r);
       if(counter.reasonForInterruption.equals(""))
         counter.reasonForInterruption = reason;
-      //out.println("BLACKLISTED " + r);
+      //out.println("BLACKLISTED " + r + " because " + reason);
       blackList.add(r);
     }
 
@@ -375,6 +375,7 @@ public class SummaryCreator extends ListenerAdapter {
           || methodName.contains("$$")
           //|| methodName.contains("Verify")
           || methodName.contains("reflect")) {
+        //out.println(methodName + " was blacklisted");
         stopRecording("blacklisted");
         return;
       }
@@ -444,10 +445,10 @@ public class SummaryCreator extends ListenerAdapter {
       if(finsn.isRead()){
         counter.readCount++;
         // TODO: Fix this - see comment below
-        if(finsn instanceof GETSTATIC) {
+        /*if(finsn instanceof GETSTATIC) {
           stopRecording("static read");
           return;
-        }
+        }*/
         // this breaks for static, sometimes, presumably the class is not initialized?
         ElementInfo ei = finsn.getLastElementInfo();
         FieldInfo fi = finsn.getFieldInfo();
@@ -548,7 +549,7 @@ public class SummaryCreator extends ListenerAdapter {
   }
   @Override
   public void exceptionThrown(VM vm, ThreadInfo currentThread, ElementInfo thrownException) {
-    stopRecording();
+    //stopRecording();
   }
 
   // Search listener part
