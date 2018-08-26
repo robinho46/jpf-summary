@@ -93,7 +93,6 @@ public class SummaryCreator extends ListenerAdapter {
   public SummaryCreator (Config config, JPF jpf) {
     //  @jpfoption et.skip_init : boolean - do not log execution before entering main() (default=true). 
     skipInit = config.getBoolean("et.skip_init", true);
-    skipInit = true;
     if (skipInit) {
       skip = true;
     }
@@ -118,7 +117,6 @@ public class SummaryCreator extends ListenerAdapter {
     blackList.add("java.io.Bits.getLong([BI)J");
     blackList.add("java.lang.Long.longValue()J");
 
-
     //TEST-gov.nasa.jpf.test.java.concurrent.ExecutorServiceTest
     blackList.add("java.util.concurrent.locks.AbstractOwnableSynchronizer.setExclusiveOwnerThread(Ljava/lang/Thread;)V");
     
@@ -126,18 +124,11 @@ public class SummaryCreator extends ListenerAdapter {
     blackList.add("java.lang.String.valueOf(Ljava/lang/Object;)Ljava/lang/String;");
     blackList.add("toString");
 
-
     // Test gov.nasa.jpf.test.mc.basic.AttrsTest
     // This might actually be "OK", 
     // if breaking attributes only affects other extensions, not core?
     blackList.add("java.lang.Integer.intValue()I");
 
-    // pool1 orig - these summaries somehow reduced the state space by 4? 
-    // could be because of the data-race?
-    //blackList.add("org.apache.commons.pool.impl.CursorableLinkedList$Listable.next()Lorg/apache/commons/pool/impl/CursorableLinkedList$Listable;");
-    //blackList.add("org.apache.commons.pool.impl.CursorableLinkedList$Listable.value()Ljava/lang/Object;");
-
-    // Todo add classnames here
     nativeWhiteList.add("matches");
     nativeWhiteList.add("desiredAssertionStatus");
     nativeWhiteList.add("print");
@@ -147,28 +138,25 @@ public class SummaryCreator extends ListenerAdapter {
   }
 
   public void stopRecording(String reason) {
-    for(String r : recording) {
-      assert(!recorded.contains(r));
+    for(String methodName : recording) {
+      assert(!recorded.contains(methodName));
 
-      MethodCounter counter = counterMap.get(r);
+      MethodCounter counter = counterMap.get(methodName);
       if(counter.reasonForInterruption.equals(""))
         counter.reasonForInterruption = reason;
-      //out.println("BLACKLISTED " + r + " because " + reason);
-      blackList.add(r);
+      
+      blackList.add(methodName);
     }
 
     recording = new HashSet<>();
   }
 
   public void stopRecording() {
-    for(String r : recording) {
-      assert(!recorded.contains(r));
-      //contextMap.remove(r);
-      //modificationMap.remove(r);
-      counterMap.get(r).reasonForInterruption = "transition or lock";
-      MethodCounter counter = counterMap.get(r);
-
-      blackList.add(r);
+    for(String methodName : recording) {
+      assert(!recorded.contains(methodName));
+      // not conditional, as these interruptions will in a sense override any others
+      counterMap.get(methodName).reasonForInterruption = "transition or lock";
+      blackList.add(methodName);
     }
 
     recording = new HashSet<>();
@@ -239,7 +227,7 @@ public class SummaryCreator extends ListenerAdapter {
     
         counterMap.get(methodName).totalCalls++;
         summary.mods.applyModifications();
-        //out.println("applied summary for " + methodName);
+        out.println("applied summary for " + methodName);
         //out.println(summary.context);
         //out.println(summary.mods);
 
@@ -262,47 +250,49 @@ public class SummaryCreator extends ListenerAdapter {
           return;
         }
 
-        // prepare stack with correct return value
         Object returnValue = summary.mods.getReturnValue();
-
-        if (returnValue == null) {
-          frame.pushRef(MJIEnv.NULL);
-        } else if(returnType.equals("J")) {
-          frame.pushLong((Long) returnValue);
-        } else if(returnType.equals("D")) {
-          frame.pushDouble((Double) returnValue);
-        } else if(returnType.equals("F")) {
-          frame.pushFloat((Float) returnValue);
-        } else if(returnType.equals("S")) {
-            frame.push((Integer) returnValue);
-        } else if(returnType.equals("I")) {
-            frame.push((Integer) returnValue);
-        } else if(returnType.equals("Z")) {
-          if(returnValue instanceof Boolean) {
-            boolean flag = (Boolean) returnValue;
-            if(flag) {
-              frame.push(0);
-            } else {
-              frame.push(1);
-            }
-          } else {
-            frame.push((Integer) returnValue);
-          }
-        } else {
-          if(returnValue instanceof ElementInfo) {
-            ElementInfo returnObject = (ElementInfo) returnValue;
-            frame.pushRef(returnObject.getObjectRef());
-          } else {
-            if ((Integer) returnValue == MJIEnv.NULL) {
-              return;
-            }
-            if(vm.getElementInfo((Integer) returnValue) == null ) {
-              return;
-            }
-            frame.pushRef((Integer) returnValue);
-          }
-        }
+        putReturnValueOnStackFrame(returnType, returnValue, frame, vm);
         ti.skipInstruction(nextInstruction);
+      }
+    }
+  }
+
+  private void putReturnValueOnStackFrame(String returnType, Object returnValue, StackFrame frame, VM vm) {
+    if (returnValue == null) {
+      frame.pushRef(MJIEnv.NULL);
+    } else if(returnType.equals("J")) {
+      frame.pushLong((Long) returnValue);
+    } else if(returnType.equals("D")) {
+      frame.pushDouble((Double) returnValue);
+    } else if(returnType.equals("F")) {
+      frame.pushFloat((Float) returnValue);
+    } else if(returnType.equals("S")) {
+        frame.push((Integer) returnValue);
+    } else if(returnType.equals("I")) {
+        frame.push((Integer) returnValue);
+    } else if(returnType.equals("Z")) {
+      if(returnValue instanceof Boolean) {
+        boolean flag = (Boolean) returnValue;
+        if(flag) {
+          frame.push(0);
+        } else {
+          frame.push(1);
+        }
+      } else {
+        frame.push((Integer) returnValue);
+      }
+    } else {
+      if(returnValue instanceof ElementInfo) {
+        ElementInfo returnObject = (ElementInfo) returnValue;
+        frame.pushRef(returnObject.getObjectRef());
+      } else {
+        if ((Integer) returnValue == MJIEnv.NULL) {
+          return;
+        }
+        if(vm.getElementInfo((Integer) returnValue) == null ) {
+          return;
+        }
+        frame.pushRef((Integer) returnValue);
       }
     }
   }
@@ -351,32 +341,7 @@ public class SummaryCreator extends ListenerAdapter {
         recording.add(methodName);
       }
 
-      if(mi.getReturnTypeCode() == Types.T_ARRAY) {
-        stopRecording("array type");
-        return;
-      }
-
-      if(mi.getName().equals("<init>")) {
-        stopRecording("<init>");
-        return;
-      }
-
-      if(mi.getName().equals("<clinit>")) {
-        stopRecording("<clinit>");
-        return;
-      }
-
-      // if a method is blacklisted, or is a synthetic method
-      // methodName will match mi.getFullName,
-      // getName() is used for the manually entered names
-      if(blackList.contains(methodName) 
-          || blackList.contains(mi.getName())
-          //|| methodName.contains("$")
-          || methodName.contains("$$")
-          //|| methodName.contains("Verify")
-          || methodName.contains("reflect")) {
-        //out.println(methodName + " was blacklisted");
-        stopRecording("blacklisted");
+      if(methodStopsRecording(mi, methodName)) {
         return;
       }
 
@@ -384,16 +349,17 @@ public class SummaryCreator extends ListenerAdapter {
 
       Object[] args = call.getArgumentValues(ti);
       if(!contextMap.containsKey(methodName)) {
+        boolean isStatic = executedInsn instanceof INVOKESTATIC;
         byte[] types = mi.getArgumentTypes();
-        for(byte type : types) {/*
+        for(byte type : types) {
           if(type == Types.T_ARRAY) {
             stopRecording("array argument");
             return;
-          }*/
+          }
         }
 
-        if(executedInsn instanceof INVOKESTATIC) {
-          contextMap.put(methodName, new MethodContext(args, runningThreads == 1));
+        if(isStatic) {
+          contextMap.put(methodName, new MethodContext(args, runningThreads==1));
         }else{
           if(ti.getElementInfo(call.getLastObjRef()) == null) {
             stopRecording("faulty this");
@@ -414,23 +380,11 @@ public class SummaryCreator extends ListenerAdapter {
       String methodName = mi.getFullName();
 
       if(recording.contains(methodName)) {
-        //recorded.add(methodName);
-        modificationMap.get(methodName).setReturnValue(ret.getReturnValue(ti));
-        if(container.canStoreMoreSummaries(methodName)) {
-          container.addSummary(methodName, contextMap.get(methodName), modificationMap.get(methodName));
-          contextMap.remove(methodName);
-          modificationMap.remove(methodName);
-        } else {
-          // stop recording "methodName"
-          recorded.add(methodName);
-        }
-        counterMap.get(methodName).recorded = true;
-        recording.remove(methodName);
+        Object returnValue = ret.getReturnValue(ti);
+        completeRecording(methodName, returnValue);
       }
     } else if(executedInsn instanceof EXECUTENATIVE) {
-      String methodName = mi.getFullName();
       if(nativeWhiteList.contains(mi.getName())){
-        //out.println("CALLED WHITELISTED NATIVE FUNCTION " + mi.getFullName());
         return;
       }
       stopRecording("native method");
@@ -440,66 +394,119 @@ public class SummaryCreator extends ListenerAdapter {
         return;
 
       FieldInstruction finsn = (FieldInstruction) executedInsn;
-      MethodCounter counter = counterMap.get(methodName);
-      MethodContext context = contextMap.get(methodName);
       if(finsn.isRead()){
-        counter.readCount++;
-        // TODO: Fix this - see comment below
-        /*if(finsn instanceof GETSTATIC) {
-          stopRecording("static read");
-          return;
-        }*/
-        // this breaks for static, sometimes, presumably the class is not initialized?
-        ElementInfo ei = finsn.getLastElementInfo();
-        FieldInfo fi = finsn.getFieldInfo();
-        int storageOffset = fi.getStorageOffset();
-        assert(storageOffset != -1);
-        if(ei.isShared()) {
-          stopRecording("shared field read");
-          return;
-        }
-
-        if(finsn instanceof GETFIELD) {
-          // propagate context to all recording methods
-          for(String stackMethodName : recording) {
-            if(!contextMap.get(stackMethodName).containsField(finsn.getFieldName(), ei)) {
-              contextMap.get(stackMethodName).addField(finsn.getFieldName(), ei, ei.getFieldValueObject(fi.getName()));
-            }
-          }
-        }  else if (finsn instanceof GETSTATIC) {
-          for(String stackMethodName : recording) {
-            if(!contextMap.get(stackMethodName).containsStaticField(finsn.getFieldName()))
-              contextMap.get(stackMethodName).addStaticField(finsn.getFieldName(),fi.getClassInfo(),ei.getFieldValueObject(fi.getName()));
-          }
-        }
+        handleReadInstruction(methodName, finsn);
       } else {
-        counter.writeCount++;
-        ElementInfo ei = finsn.getLastElementInfo();
-        FieldInfo fi = finsn.getFieldInfo();
-        int storageOffset = fi.getStorageOffset();
-        assert(storageOffset != -1);
-        if(ei.isShared()) {
-          stopRecording("shared field write");
-          return;
-        }
-        /*
-        if(fi.getType().charAt(fi.getType().length()-1) == ']') {
-          stopRecording("array operation");
-        }*/
-
-        if(finsn instanceof PUTFIELD) {
-          for(String stackMethodName : recording) {
-            modificationMap.get(stackMethodName).addField(finsn.getFieldName(), fi.getType(), ei, ei.getFieldValueObject(fi.getName()));
-          }
-          
-        } else if(finsn instanceof PUTSTATIC) {
-          for(String stackMethodName : recording) {
-            modificationMap.get(stackMethodName).addStaticField(finsn.getFieldName(), fi.getType(), fi.getClassInfo(), ei.getFieldValueObject(fi.getName()));
-          }
-          
-        }
+        handleWriteInstruction(methodName, finsn);
       }
     }
+  }
+
+  private void handleWriteInstruction(String methodName, FieldInstruction finsn) {
+    counterMap.get(methodName).writeCount++;
+
+    ElementInfo ei = finsn.getLastElementInfo();
+    FieldInfo fi = finsn.getFieldInfo();
+    int storageOffset = fi.getStorageOffset();
+    assert(storageOffset != -1);
+    if(ei.isShared()) {
+      stopRecording("shared field write");
+      return;
+    }
+
+    if(finsn instanceof PUTFIELD) {
+      for(String stackMethodName : recording) {
+        modificationMap.get(stackMethodName).addField(finsn.getFieldName(), fi.getType(), ei, ei.getFieldValueObject(fi.getName()));
+      }
+      
+    } else if(finsn instanceof PUTSTATIC) {
+      for(String stackMethodName : recording) {
+        modificationMap.get(stackMethodName).addStaticField(finsn.getFieldName(), fi.getType(), fi.getClassInfo(), ei.getFieldValueObject(fi.getName()));
+      }
+      
+    }
+  }
+
+  private void handleReadInstruction(String methodName, FieldInstruction finsn) {
+    counterMap.get(methodName).readCount++;
+    
+    MethodContext context = contextMap.get(methodName);
+
+    // TODO: Fix this - see comment below
+    if(finsn instanceof GETSTATIC) {
+      stopRecording("static read");
+      return;
+    }
+    // sometimes this breaks for static, presumably the class is not initialized?
+    ElementInfo ei = finsn.getLastElementInfo();
+    FieldInfo fi = finsn.getFieldInfo();
+    int storageOffset = fi.getStorageOffset();
+    assert(storageOffset != -1);
+    if(ei.isShared()) {
+      stopRecording("shared field read");
+      return;
+    }
+
+    if(finsn instanceof GETFIELD) {
+      // propagate context to all recording methods
+      for(String stackMethodName : recording) {
+        if(!contextMap.get(stackMethodName).containsField(finsn.getFieldName(), ei)) {
+          contextMap.get(stackMethodName).addField(finsn.getFieldName(), ei, ei.getFieldValueObject(fi.getName()));
+        }
+      }
+    }  else if (finsn instanceof GETSTATIC) {
+      for(String stackMethodName : recording) {
+        if(!contextMap.get(stackMethodName).containsStaticField(finsn.getFieldName()))
+          contextMap.get(stackMethodName).addStaticField(finsn.getFieldName(),fi.getClassInfo(),ei.getFieldValueObject(fi.getName()));
+      }
+    }
+  }
+
+  private void completeRecording(String methodName, Object returnValue) {
+    modificationMap.get(methodName).setReturnValue(returnValue);
+    if(container.canStoreMoreSummaries(methodName)) {
+      container.addSummary(methodName, contextMap.get(methodName), modificationMap.get(methodName));
+      contextMap.remove(methodName);
+      modificationMap.remove(methodName);
+    } else {
+      // stop recording "methodName"
+      recorded.add(methodName);
+    }
+    counterMap.get(methodName).recorded = true;
+    recording.remove(methodName);
+  }
+
+  private boolean methodStopsRecording(MethodInfo mi, String methodName) {
+    if(mi.getReturnTypeCode() == Types.T_ARRAY) {
+      stopRecording("array type");
+      return true;
+    }
+
+    if(mi.getName().equals("<init>")) {
+      stopRecording("<init>");
+      return true;
+    }
+
+    if(mi.getName().equals("<clinit>")) {
+      stopRecording("<clinit>");
+      return true;
+    }
+
+    // if a method is blacklisted, or is a synthetic method
+    // methodName will match mi.getFullName,
+    // getName() is used for the manually entered names
+    if(blackList.contains(methodName) 
+        || blackList.contains(mi.getName())
+        //|| methodName.contains("$")
+        || methodName.contains("$$")
+        //|| methodName.contains("Verify")
+        || methodName.contains("reflect")) {
+      //out.println(methodName + " was blacklisted");
+      stopRecording("blacklisted");
+      return true;
+    }
+
+    return false;
   }
 
 
@@ -585,7 +592,7 @@ public class SummaryCreator extends ListenerAdapter {
     out.println("----------------------------------- search finished");
     out.println();
     //methodStatistics();
-    out.println(methodStatistics());
+    //out.println(methodStatistics());
   }
 
 
