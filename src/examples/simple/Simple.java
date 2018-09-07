@@ -1,9 +1,9 @@
 import java.util.LinkedList;
 
-public class Simple  {
-  static int x;
+class Simple  {
+  private static int x;
 
-  public static int read() {
+  private static int read() {
     int y = 42;
 
     if(x==y){
@@ -13,22 +13,22 @@ public class Simple  {
     return 1;
   }
  
-  public static void test (String in) {
+  private static void test(String in) {
     System.out.println(in);
     String s2 = in + "asdw";
   }
  
-  public static void write(int arg) {
+  private static void write(int arg) {
     arg += 5;
     x = arg;
   }
 
-  public static void takeThisObjectAndDoSomething(Particular obj) {
+  private static void takeThisObjectAndDoSomething(Particular obj) {
     //do nothing
     obj.incrementY();
   }
 
-  public void doSomethingElse(int arg, boolean flag) {
+  private void doSomethingElse(int arg, boolean flag) {
     // do nothing external, but perform a read/write to local
     flag = !flag;
   }

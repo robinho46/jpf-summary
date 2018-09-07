@@ -17,79 +17,62 @@
  */
 package gov.nasa.jpf;
 
-import gov.nasa.jpf.Config;
-import gov.nasa.jpf.JPF;
-import gov.nasa.jpf.ListenerAdapter;
-import gov.nasa.jpf.jvm.bytecode.INVOKESPECIAL;
-import gov.nasa.jpf.jvm.bytecode.INVOKEVIRTUAL;
-import gov.nasa.jpf.jvm.bytecode.INVOKESTATIC;
+import gov.nasa.jpf.jvm.bytecode.EXECUTENATIVE;
 import gov.nasa.jpf.jvm.bytecode.GETFIELD;
 import gov.nasa.jpf.jvm.bytecode.GETSTATIC;
-import gov.nasa.jpf.jvm.bytecode.PUTFIELD;
-import gov.nasa.jpf.jvm.bytecode.PUTSTATIC;
-import gov.nasa.jpf.jvm.bytecode.INVOKEINTERFACE;
-import gov.nasa.jpf.jvm.bytecode.EXECUTENATIVE;
+import gov.nasa.jpf.jvm.bytecode.INVOKESTATIC;
 import gov.nasa.jpf.jvm.bytecode.JVMInvokeInstruction;
 import gov.nasa.jpf.jvm.bytecode.JVMReturnInstruction;
-import gov.nasa.jpf.jvm.bytecode.NATIVERETURN;
-import gov.nasa.jpf.jvm.bytecode.RETURN;
-import gov.nasa.jpf.jvm.bytecode.DIRECTCALLRETURN;
-import gov.nasa.jpf.jvm.bytecode.VirtualInvocation;
+import gov.nasa.jpf.jvm.bytecode.PUTFIELD;
+import gov.nasa.jpf.jvm.bytecode.PUTSTATIC;
 import gov.nasa.jpf.search.Search;
 import gov.nasa.jpf.vm.ChoiceGenerator;
-import gov.nasa.jpf.vm.MJIEnv;
-import gov.nasa.jpf.vm.VM;
-import gov.nasa.jpf.vm.StackFrame;
-import gov.nasa.jpf.vm.Types;
-import gov.nasa.jpf.vm.ClassInfo;
-import gov.nasa.jpf.vm.MethodInfo;
-import gov.nasa.jpf.vm.ThreadInfo;
 import gov.nasa.jpf.vm.ElementInfo;
 import gov.nasa.jpf.vm.FieldInfo;
-import gov.nasa.jpf.vm.LocalVarInfo;
 import gov.nasa.jpf.vm.Instruction;
+import gov.nasa.jpf.vm.MJIEnv;
+import gov.nasa.jpf.vm.MethodInfo;
+import gov.nasa.jpf.vm.StackFrame;
+import gov.nasa.jpf.vm.ThreadInfo;
+import gov.nasa.jpf.vm.Types;
+import gov.nasa.jpf.vm.VM;
 import gov.nasa.jpf.vm.bytecode.FieldInstruction;
-import gov.nasa.jpf.vm.bytecode.StaticFieldInstruction;
-
-import gov.nasa.jpf.vm.LoadOnJPFRequired;
 
 import java.io.PrintWriter;
-import java.util.HashSet;
-import java.util.Set;
 import java.util.HashMap;
-import java.util.Iterator;
+import java.util.HashSet;
 
 /**
  * Listener implementing a method-summary utility.
  */
-public class SummaryCreator extends ListenerAdapter {
+class SummaryCreator extends ListenerAdapter {
   static final String INDENT = "  ";
   // contains the names of the methods that have been recorded as
   // doing a complete call-return cycle within a single transition
-  static HashSet<String> recorded = new HashSet<>();
+  private static HashSet<String> recorded = new HashSet<>();
   // contains the names of the methods currently being recorded
-  static HashSet<String> recording = new HashSet<>();
+  private static HashSet<String> recording = new HashSet<>();
   // contains the names of the methods that should never be recorded
   // this could be because they are interrupted by a transition
   // or because they call native methods that we can't track
-  static HashSet<String> blackList = new HashSet<>();
+  private static HashSet<String> blackList = new HashSet<>();
   // contains the names of native method calls that are known not to have 
   // side-effects that can't be captured in the summary
-  static HashSet<String> nativeWhiteList = new HashSet<>();
+  private static HashSet<String> nativeWhiteList = new HashSet<>();
 
-  static SummaryContainer container = new SummaryContainer();
-  static HashMap<String,MethodContext> contextMap = new HashMap<>();
-  static HashMap<String,MethodCounter> counterMap = new HashMap<>();
-  static HashMap<String,MethodModifications> modificationMap = new HashMap<>();
+  private static SummaryContainer container = new SummaryContainer();
+  private static HashMap<String,MethodContext> contextMap = new HashMap<>();
+  private static HashMap<String,MethodCounter> counterMap = new HashMap<>();
+  private static HashMap<String,MethodModifications> modificationMap = new HashMap<>();
 
-  boolean skipInit = false;
-  boolean skipped = false;
+  private boolean skipInit = false;
+  private boolean skipped = false;
 
-  MethodInfo lastMi;
-  PrintWriter out;
+  private MethodInfo lastMi;
+  private PrintWriter out;
 
-  boolean skip;
-  MethodInfo miMain; // just to make init skipping more efficient
+  private boolean skip;
+  private MethodInfo miMain; // just to make init skipping more efficient
   public SummaryCreator (Config config, JPF jpf) {
     //  @jpfoption et.skip_init : boolean - do not log execution before entering main() (default=true). 
     skipInit = config.getBoolean("et.skip_init", true);
@@ -102,7 +85,7 @@ public class SummaryCreator extends ListenerAdapter {
     out.println("~Summaries active~");
   }
 
-  public void reinitialise() {
+  private void reinitialise() {
     recorded = new HashSet<>();
     recording = new HashSet<>();
     blackList = new HashSet<>();
@@ -137,7 +120,7 @@ public class SummaryCreator extends ListenerAdapter {
     nativeWhiteList.add("max");
   }
 
-  public void stopRecording(String reason) {
+  private void stopRecording(String reason) {
     for(String methodName : recording) {
       assert(!recorded.contains(methodName));
 
@@ -151,7 +134,7 @@ public class SummaryCreator extends ListenerAdapter {
     recording = new HashSet<>();
   }
 
-  public void stopRecording() {
+  private void stopRecording() {
     for(String methodName : recording) {
       assert(!recorded.contains(methodName));
       // not conditional, as these interruptions will in a sense override any others

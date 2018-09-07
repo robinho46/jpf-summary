@@ -2,9 +2,9 @@
  * Example showing how summaries interact with printing.
  **/
 
-public class PrintingExample {
+class PrintingExample {
   private String message;
-  public PrintingExample() {
+  private PrintingExample() {
     message = "This is a non-static String";
   }
 
@@ -12,7 +12,7 @@ public class PrintingExample {
     message = msg;
   }
 
-  public void printMessage() {
+  private void printMessage() {
     System.out.println(message);
   }
 

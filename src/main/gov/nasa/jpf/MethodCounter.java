@@ -18,7 +18,7 @@
 
 package gov.nasa.jpf;
 
-public class MethodCounter {
+class MethodCounter {
   public MethodCounter(String methodName){
     this.methodName = methodName;
     totalCalls = 0;
@@ -63,13 +63,13 @@ public class MethodCounter {
 
     return str;
   }
-  public String methodName;
+  private String methodName;
 
   public int totalCalls;
   
   // the number of times the method is called 
   // when there's only a single thread.
-  public int runningAlone;
+  private int runningAlone;
   
   // true if it ever finishes a call-return
   // withing the same transition

@@ -35,10 +35,10 @@ import java.time.Duration;
   * also terminates the search after a given number of minutes.
   */
 
-public class SearchTimer extends ListenerAdapter {
-  PrintWriter out;
-  Instant start;
-  int timeLimit;
+class SearchTimer extends ListenerAdapter {
+  private PrintWriter out;
+  private Instant start;
+  private int timeLimit;
   public SearchTimer (Config config, JPF jpf) {
     out = new PrintWriter(System.out, true);
     timeLimit = config.getInt("search.timeout", -1);

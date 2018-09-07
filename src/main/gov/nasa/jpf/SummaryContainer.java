@@ -28,22 +28,15 @@ import gov.nasa.jpf.vm.ElementInfo;
 /**
   * Helper class that provides the ability to store multiple summaries for a single method.
   */
-public class SummaryContainer {
+class SummaryContainer {
   private Map<String,List<MethodSummary>> container;
   // the maximum number of contexts which we capture
   private static final int CAPACITY = 100;
-  public SummaryContainer() {
+  SummaryContainer() {
     container = new HashMap<>();
   }
 
-  public void addMethod(String methodName) {
-    List<MethodSummary> summaries = container.get(methodName);
-    if(summaries == null) {
-      return;
-    }
-  }
-
-  public void addSummary(String methodName, MethodContext context, MethodModifications mods) {
+  void addSummary(String methodName, MethodContext context, MethodModifications mods) {
     List<MethodSummary> summaries = container.get(methodName);
     if(summaries == null) {
       summaries = new ArrayList<>();
@@ -53,23 +46,22 @@ public class SummaryContainer {
     }
     if(summaries.size() < CAPACITY) {
       summaries.add(new MethodSummary(context, mods));
-      return;
     }
 
     //throw new IndexOutOfBoundsException("Trying to add too many summaries for " + methodName);
   }
 
-  public boolean canStoreMoreSummaries(String methodName) {
+  boolean canStoreMoreSummaries(String methodName) {
     List<MethodSummary> summaries = container.get(methodName);
     return summaries == null || summaries.size() < CAPACITY; 
   }
 
-  public boolean hasSummary(String methodName) {
+  boolean hasSummary(String methodName) {
     List<MethodSummary> summaries = container.get(methodName);
     return summaries != null && summaries.size() > 0; 
   }
 
-  public MethodSummary hasMatchingContext(String methodName, ElementInfo _this, Object[] args, boolean runningAlone) {
+  MethodSummary hasMatchingContext(String methodName, ElementInfo _this, Object[] args, boolean runningAlone) {
     List<MethodSummary> summaries = container.get(methodName);
     if(summaries == null) {
       return null;
@@ -83,7 +75,7 @@ public class SummaryContainer {
     return null;
   }
 
-  public MethodSummary hasMatchingContext(String methodName, Object[] args, boolean runningAlone) {
+  MethodSummary hasMatchingContext(String methodName, Object[] args, boolean runningAlone) {
     List<MethodSummary> summaries = container.get(methodName);
     if(summaries == null) {
       return null;

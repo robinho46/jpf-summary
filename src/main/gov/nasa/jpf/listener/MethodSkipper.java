@@ -20,38 +20,29 @@ package gov.nasa.jpf.listener;
 import gov.nasa.jpf.Config;
 import gov.nasa.jpf.JPF;
 import gov.nasa.jpf.ListenerAdapter;
-import gov.nasa.jpf.jvm.bytecode.INVOKESPECIAL;
 import gov.nasa.jpf.jvm.bytecode.JVMInvokeInstruction;
 import gov.nasa.jpf.jvm.bytecode.JVMReturnInstruction;
-import gov.nasa.jpf.jvm.bytecode.VirtualInvocation;
 import gov.nasa.jpf.search.Search;
 import gov.nasa.jpf.vm.Instruction;
-import gov.nasa.jpf.vm.MJIEnv;
-import gov.nasa.jpf.vm.VM;
-import gov.nasa.jpf.vm.StackFrame;
 import gov.nasa.jpf.vm.MethodInfo;
 import gov.nasa.jpf.vm.ThreadInfo;
-import gov.nasa.jpf.vm.ElementInfo;
-import gov.nasa.jpf.vm.LocalVarInfo;
+import gov.nasa.jpf.vm.VM;
 
 import java.io.PrintWriter;
-import java.util.HashSet;
-import java.util.HashMap;
-import java.util.Iterator;
 
 /**
   * Small listener that skips the body of a given method.
   */
 
-public class MethodSkipper extends ListenerAdapter {
-  boolean skipInit = false;
-  String methodToSkip;
+class MethodSkipper extends ListenerAdapter {
+  private boolean skipInit = false;
+  private String methodToSkip;
 
-  MethodInfo lastMi;
-  PrintWriter out;
+  private MethodInfo lastMi;
+  private PrintWriter out;
 
-  boolean skip;
-  MethodInfo miMain; // just to make init skipping more efficient
+  private boolean skip;
+  private MethodInfo miMain; // just to make init skipping more efficient
 
   public MethodSkipper (Config config, JPF jpf) {
     /** @jpfoption et.skip_init : boolean - do not log execution before entering main() (default=true). */

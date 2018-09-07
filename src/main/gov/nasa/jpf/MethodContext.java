@@ -18,50 +18,38 @@
 
 package gov.nasa.jpf;
 
-import gov.nasa.jpf.vm.VM;
-import gov.nasa.jpf.vm.StackFrame;
 import gov.nasa.jpf.vm.ClassInfo;
-import gov.nasa.jpf.vm.MethodInfo;
-import gov.nasa.jpf.vm.ThreadInfo;
 import gov.nasa.jpf.vm.ElementInfo;
-import gov.nasa.jpf.vm.Fields;
-import gov.nasa.jpf.vm.FieldInfo;
-import gov.nasa.jpf.vm.LocalVarInfo;
-import gov.nasa.jpf.vm.Instruction;
-import gov.nasa.jpf.vm.bytecode.FieldInstruction;
 
-import java.io.PrintWriter;
-import java.util.HashSet;
-import java.util.Set;
 import java.util.HashMap;
-import java.util.Iterator;
-public class MethodContext {
+
+class MethodContext {
 
   private Object[] params;
   private boolean runningAlone;
 
-  public ElementInfo _this;
+  private ElementInfo _this;
   // We need to track Objectref, FieldName, Type(?), Value 
   private HashMap<Integer,DependentFieldData> dependentFields;
   private HashMap<String,DependentFieldData> dependentStaticFields;
 
   private class DependentFieldData {
-    public String fieldName;
+    String fieldName;
     // for non-static fields
-    public ElementInfo sourceObject;
-    public Object previousValue;
+    ElementInfo sourceObject;
+    Object previousValue;
     // only needed/valid for Static fields
-    public ClassInfo classInfo;
+    ClassInfo classInfo;
 
     // for non-static fields
-    public DependentFieldData(String fieldName, ElementInfo ei, Object previousValue) {
+    DependentFieldData(String fieldName, ElementInfo ei, Object previousValue) {
       this.fieldName = fieldName;
       sourceObject = ei;
       this.previousValue = previousValue;
     }
 
     // for static fields
-    public DependentFieldData(String fieldName, ClassInfo ci, Object previousValue) {
+    DependentFieldData(String fieldName, ClassInfo ci, Object previousValue) {
       this.fieldName = fieldName;
       classInfo = ci;
       this.previousValue = previousValue;
@@ -254,7 +242,7 @@ public class MethodContext {
     dependentStaticFields.put(fieldName, new DependentFieldData(fieldName, ci, value));
   }
 
-  public HashMap<Integer,DependentFieldData> getDependentFields() {
+  private HashMap<Integer,DependentFieldData> getDependentFields() {
     return dependentFields;
   }
 

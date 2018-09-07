@@ -1,14 +1,14 @@
 
-public class NestedExample {
+class NestedExample {
   private int outer;
   private int inner;
 
-  public NestedExample() {
+  private NestedExample() {
     outer = 5;
     inner = 10;
   }
 
-  public void outerCall() {
+  private void outerCall() {
     if(innerCall()) {
       outer = 42;
     }else{
@@ -16,7 +16,7 @@ public class NestedExample {
     }
   }
 
-  public boolean innerCall() {
+  private boolean innerCall() {
     if(inner == 10) {
       return true;
     } else {
@@ -24,15 +24,15 @@ public class NestedExample {
     }
   }
 
-  public void setInner(int value) {
+  private void setInner(int value) {
     inner = value;
   }
 
-  public int getInner() {
+  private int getInner() {
     return inner;
   }
 
-  public int getOuter() {
+  private int getOuter() {
     return outer;
   }
 

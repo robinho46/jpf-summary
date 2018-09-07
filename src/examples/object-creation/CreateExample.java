@@ -5,23 +5,23 @@
 public class CreateExample {
   private class Test {
     private int x;
-    public Test() {
+    Test() {
       x = 0;
     }
 
-    public void setX(int x) {
+    void setX(int x) {
       this.x = x;
     }
 
-    public int getX() {
+    int getX() {
       return x;
     }
   }
 
-  public CreateExample() {
+  private CreateExample() {
   }
 
-  public Test createObject() {
+  private Test createObject() {
     return new Test();
   }
 

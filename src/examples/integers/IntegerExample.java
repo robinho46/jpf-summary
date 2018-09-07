@@ -1,10 +1,10 @@
-public class IntegerExample {
+class IntegerExample {
   private int x;
-  public IntegerExample() {
+  private IntegerExample() {
     x = 0;
   }
 
-  public int getXPlusFive() {
+  private int getXPlusFive() {
     int i = 100;
     int y = 500;
     while(i-- != 0) {
@@ -17,7 +17,7 @@ public class IntegerExample {
 
   }
 
-  public void incrementX() {
+  private void incrementX() {
     x++;
   }
 

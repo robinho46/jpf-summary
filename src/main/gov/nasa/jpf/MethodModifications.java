@@ -18,23 +18,12 @@
 
 package gov.nasa.jpf;
 
-import gov.nasa.jpf.vm.VM;
-import gov.nasa.jpf.vm.StackFrame;
 import gov.nasa.jpf.vm.ClassInfo;
-import gov.nasa.jpf.vm.MethodInfo;
-import gov.nasa.jpf.vm.ThreadInfo;
 import gov.nasa.jpf.vm.ElementInfo;
-import gov.nasa.jpf.vm.FieldInfo;
-import gov.nasa.jpf.vm.LocalVarInfo;
-import gov.nasa.jpf.vm.Instruction;
-import gov.nasa.jpf.vm.bytecode.FieldInstruction;
 
-import java.io.PrintWriter;
-import java.util.HashSet;
-import java.util.Set;
 import java.util.HashMap;
-import java.util.Iterator;
-public class MethodModifications {
+
+class MethodModifications {
   public MethodModifications(Object[] args) {
     params = args;
     modifiedFields = new HashMap<>();
@@ -47,7 +36,7 @@ public class MethodModifications {
   private Object returnValue;
 
   private class ModifiedFieldData {
-    public ModifiedFieldData(String fieldName, String type, ElementInfo ei, Object newValue) {
+    ModifiedFieldData(String fieldName, String type, ElementInfo ei, Object newValue) {
       this.fieldName = fieldName;
       this.type = type;
       targetObject = ei;
@@ -55,28 +44,28 @@ public class MethodModifications {
     }
 
     // static field
-    public ModifiedFieldData(String fieldName, String type, ClassInfo ci, Object newValue) {
+    ModifiedFieldData(String fieldName, String type, ClassInfo ci, Object newValue) {
       this.fieldName = fieldName;
       this.type = type;
       classInfo = ci;
       this.newValue = newValue;
     }
 
-    public String fieldName;
-    public String type;
+    String fieldName;
+    String type;
     // for non-static fields
-    public ElementInfo targetObject;
-    public Object newValue;
+    ElementInfo targetObject;
+    Object newValue;
     // only needed/valid for Static fields
-    public ClassInfo classInfo;
+    ClassInfo classInfo;
   }
 
 
-  public HashMap<Integer,ModifiedFieldData> getModifiedFields() {
+  private HashMap<Integer,ModifiedFieldData> getModifiedFields() {
     return modifiedFields;
   }
 
-  public HashMap<Integer,ModifiedFieldData> getModifiedStaticFields() {
+  private HashMap<Integer,ModifiedFieldData> getModifiedStaticFields() {
     return modifiedStaticFields;
   }
 
@@ -122,7 +111,7 @@ public class MethodModifications {
     return returnValue;
   } 
 
-  public void applyFieldUpdate(String fieldName, String type, ElementInfo ei, Object newValue) {
+  private void applyFieldUpdate(String fieldName, String type, ElementInfo ei, Object newValue) {
     //System.out.println("Setting " + ei + "." + fieldName + " to " + newValue);
 
     // basic types

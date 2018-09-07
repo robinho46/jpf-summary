@@ -17,11 +17,11 @@
  */
 package gov.nasa.jpf;
 
-public class MethodSummary {
-  public MethodContext context;
-  public MethodModifications mods;
+class MethodSummary {
+  MethodContext context;
+  MethodModifications mods;
 
-  public MethodSummary(MethodContext context, MethodModifications mods) {
+  MethodSummary(MethodContext context, MethodModifications mods) {
     this.context = context;
     this.mods = mods;
   }
