@@ -48,7 +48,7 @@ class SummaryContainer {
       summaries.add(new MethodSummary(context, mods));
     }
 
-    //throw new IndexOutOfBoundsException("Trying to add too many summaries for " + methodName);
+    throw new IndexOutOfBoundsException("Trying to add too many summaries for " + methodName);
   }
 
   boolean canStoreMoreSummaries(String methodName) {
