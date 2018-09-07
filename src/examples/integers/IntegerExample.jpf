@@ -1,8 +1,9 @@
 target=IntegerExample
 
+@using = jpf-summary
+
 classpath=.
 sourcepath=.
-
 
 report.console.property_violation=result,error,trace,snapshot
 vm.reuse_tid=false
