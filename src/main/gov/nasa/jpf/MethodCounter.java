@@ -48,6 +48,10 @@ class MethodCounter {
         return str;
     }
 
+    public boolean isRecorded() {
+        return recorded;
+    }
+
     public String toReadableString() {
         String str = "called " + totalCalls + " times";
         if (readCount > 0)

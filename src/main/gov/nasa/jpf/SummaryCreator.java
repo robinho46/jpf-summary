@@ -26,7 +26,6 @@ import gov.nasa.jpf.jvm.bytecode.JVMReturnInstruction;
 import gov.nasa.jpf.jvm.bytecode.PUTFIELD;
 import gov.nasa.jpf.jvm.bytecode.PUTSTATIC;
 import gov.nasa.jpf.search.Search;
-import gov.nasa.jpf.vm.ChoiceGenerator;
 import gov.nasa.jpf.vm.ElementInfo;
 import gov.nasa.jpf.vm.FieldInfo;
 import gov.nasa.jpf.vm.Instruction;
@@ -43,26 +42,15 @@ import java.util.HashMap;
 import java.util.HashSet;
 
 /**
- * Listener implementing a method-summary ut..  ility.
+ * Listener implementing a method-summary utility.
  */
-public class SummaryCreator extends ListenerAdapter {
-    static final String INDENT = "  ";
-    // contains the names of the methods that have been recorded as
-    // doing a complete call-return cycle within a single transition
-    private static HashSet<String> recorded = new HashSet<>();
-    // contains the names of the methods currently being recorded
-    private static HashSet<String> recording = new HashSet<>();
-    // contains the names of the methods that should never be recorded
-    // this could be because they are interrupted by a transition
-    // or because they call native methods that we can't track
-    private static HashSet<String> blackList = new HashSet<>();
+public class SummaryCreator extends RecordingListener {
     // contains the names of native method calls that are known not to have
     // side-effects that can't be captured in the summary
     private static HashSet<String> nativeWhiteList = new HashSet<>();
 
     private static SummaryContainer container = new SummaryContainer();
     private static HashMap<String, MethodContext> contextMap = new HashMap<>();
-    private static HashMap<String, MethodCounter> counterMap = new HashMap<>();
     private static HashMap<String, MethodModifications> modificationMap = new HashMap<>();
 
     private boolean skipInit = false;
@@ -85,6 +73,7 @@ public class SummaryCreator extends ListenerAdapter {
         out.println("~Summaries active~");
     }
 
+    // necessary for tests that re-run searches
     private void reinitialise() {
         recorded = new HashSet<>();
         recording = new HashSet<>();
@@ -93,7 +82,7 @@ public class SummaryCreator extends ListenerAdapter {
 
         container = new SummaryContainer();
         contextMap = new HashMap<>();
-        counterMap = new HashMap<>();
+        counterContainer = new CounterContainer();
         modificationMap = new HashMap<>();
 
         blackList.add("java.io.Bits.getShort([BI)S");
@@ -120,13 +109,11 @@ public class SummaryCreator extends ListenerAdapter {
         nativeWhiteList.add("max");
     }
 
-    private void stopRecording(String reason) {
+    void stopRecording(String reason) {
         for (String methodName : recording) {
             assert (!recorded.contains(methodName));
 
-            MethodCounter counter = counterMap.get(methodName);
-            if (counter.reasonForInterruption.equals(""))
-                counter.reasonForInterruption = reason;
+            counterContainer.countInterruptedRecording(methodName, reason);
 
             blackList.add(methodName);
         }
@@ -134,16 +121,7 @@ public class SummaryCreator extends ListenerAdapter {
         recording = new HashSet<>();
     }
 
-    private void stopRecording() {
-        for (String methodName : recording) {
-            assert (!recorded.contains(methodName));
-            // not conditional, as these interruptions will in a sense override any others
-            counterMap.get(methodName).reasonForInterruption = "transition or lock";
-            blackList.add(methodName);
-        }
 
-        recording = new HashSet<>();
-    }
 
 
     @Override
@@ -154,7 +132,6 @@ public class SummaryCreator extends ListenerAdapter {
             return;
         }
 
-        int runningThreads = vm.getThreadList().getCount().alive;
 
         if (instructionToExecute instanceof JVMInvokeInstruction) {
             JVMInvokeInstruction call = (JVMInvokeInstruction) instructionToExecute;
@@ -164,13 +141,13 @@ public class SummaryCreator extends ListenerAdapter {
             }
             String methodName = call.getInvokedMethod().getFullName();
             if (container.hasSummary(methodName)) {
-                MethodCounter counter = counterMap.get(methodName);
-                counter.attemptedMatchCount++;
-        /*if(counter.attemptedMatchCount > 300) {
-          return;
-        }*/
+                counterContainer.countAttemptedSummaryMatch(methodName);
+//                if(counterContainer.getAttemptedMatchCount(methodName) > 300) {
+//                  return;
+//                }
 
                 MethodSummary summary;
+                int runningThreads = vm.getThreadList().getCount().alive;
                 if (instructionToExecute instanceof INVOKESTATIC) {
                     summary = container.hasMatchingContext(methodName, call.getArgumentValues(ti), runningThreads == 1);
                 } else {
@@ -184,11 +161,11 @@ public class SummaryCreator extends ListenerAdapter {
                 }
 
                 if (summary == null) {
-                    counter.failedMatchCount++;
+                    counterContainer.addFailedMatchCount(methodName);
                     return;
                 }
-                counter.attemptedMatchCount = 0;
-                counter.argsMatchCount++;
+                counterContainer.addMatchedArgumentsCount(methodName);
+
 
                 // ideally none of the targets should have been frozen
                 // but it seems like they are in log4j1 - fixed
@@ -196,7 +173,7 @@ public class SummaryCreator extends ListenerAdapter {
                     return;
                 }
 
-                // TODO: Get class in a different way that doesn't break
+                // TODO: Get class in a different way that doesn't break in edge-cases
                 if (!summary.context.getDependentStaticFields().isEmpty()) {
                     return;
                 }
@@ -208,11 +185,9 @@ public class SummaryCreator extends ListenerAdapter {
                     modificationMap.get(r).addModificationFields(summary.mods);
                 }
 
-                counterMap.get(methodName).totalCalls++;
+                counterContainer.addTotalCalls(methodName);
                 summary.mods.applyModifications();
-                out.println("applied summary for " + methodName);
-                //out.println(summary.context);
-                //out.println(summary.mods);
+                // logSummaryApplication(methodName, summary);
 
                 // at this point we want to make sure that we don't create another summary
                 // like the one we just applied
@@ -220,13 +195,10 @@ public class SummaryCreator extends ListenerAdapter {
                 modificationMap.remove(methodName);
                 recording.remove(methodName);
 
-
                 Instruction nextInstruction = call.getNext();
                 skipped = true;
-
                 StackFrame frame = ti.getModifiableTopFrame();
                 frame.removeArguments(mi);
-
                 String returnType = mi.getReturnType();
                 if (returnType.equals("V")) {
                     ti.skipInstruction(nextInstruction);
@@ -264,6 +236,7 @@ public class SummaryCreator extends ListenerAdapter {
             } else {
                 frame.push((Integer) returnValue);
             }
+            // method returns an object
         } else {
             if (returnValue instanceof ElementInfo) {
                 ElementInfo returnObject = (ElementInfo) returnValue;
@@ -300,10 +273,10 @@ public class SummaryCreator extends ListenerAdapter {
                 skipped = false;
                 return;
             }
+
             JVMInvokeInstruction call = (JVMInvokeInstruction) executedInsn;
             mi = call.getInvokedMethod(ti);
 
-            // breaks in log4j3 orig
             if (mi == null)
                 return;
 
@@ -312,12 +285,9 @@ public class SummaryCreator extends ListenerAdapter {
                 return;
 
             String methodName = mi.getFullName();
+            int numberOfInstructions = mi.getNumberOfInstructions();
 
-            if (!counterMap.containsKey(methodName)) {
-                counterMap.put(methodName, new MethodCounter(methodName));
-                counterMap.get(methodName).instructionCount = mi.getNumberOfInstructions();
-            }
-            counterMap.get(methodName).totalCalls++;
+            counterContainer.addMethodInvocation(methodName, numberOfInstructions);
 
 
             if (!recorded.contains(methodName)) {
@@ -355,8 +325,6 @@ public class SummaryCreator extends ListenerAdapter {
             if (!modificationMap.containsKey(methodName)) {
                 modificationMap.put(methodName, new MethodModifications(args));
             }
-
-
         } else if (executedInsn instanceof JVMReturnInstruction) {
             JVMReturnInstruction ret = (JVMReturnInstruction) executedInsn;
             mi = ret.getMethodInfo();
@@ -386,7 +354,7 @@ public class SummaryCreator extends ListenerAdapter {
     }
 
     private void handleWriteInstruction(String methodName, FieldInstruction finsn) {
-        counterMap.get(methodName).writeCount++;
+        counterContainer.addWriteCount(methodName);
 
         ElementInfo ei = finsn.getLastElementInfo();
         FieldInfo fi = finsn.getFieldInfo();
@@ -411,9 +379,7 @@ public class SummaryCreator extends ListenerAdapter {
     }
 
     private void handleReadInstruction(String methodName, FieldInstruction finsn) {
-        counterMap.get(methodName).readCount++;
-
-        MethodContext context = contextMap.get(methodName);
+        counterContainer.addReadCount(methodName);
 
         // TODO: Fix this - see comment below
         if (finsn instanceof GETSTATIC) {
@@ -437,12 +403,13 @@ public class SummaryCreator extends ListenerAdapter {
                     contextMap.get(stackMethodName).addField(finsn.getFieldName(), ei, ei.getFieldValueObject(fi.getName()));
                 }
             }
-        } else if (finsn instanceof GETSTATIC) {
-            for (String stackMethodName : recording) {
-                if (!contextMap.get(stackMethodName).containsStaticField(finsn.getFieldName()))
-                    contextMap.get(stackMethodName).addStaticField(finsn.getFieldName(), fi.getClassInfo(), ei.getFieldValueObject(fi.getName()));
-            }
-        }
+        } //
+//        else if (finsn instanceof GETSTATIC) {
+//            for (String stackMethodName : recording) {
+//                if (!contextMap.get(stackMethodName).containsStaticField(finsn.getFieldName()))
+//                    contextMap.get(stackMethodName).addStaticField(finsn.getFieldName(), fi.getClassInfo(), ei.getFieldValueObject(fi.getName()));
+//            }
+//        }
     }
 
     private void completeRecording(String methodName, Object returnValue) {
@@ -455,7 +422,7 @@ public class SummaryCreator extends ListenerAdapter {
             // stop recording "methodName"
             recorded.add(methodName);
         }
-        counterMap.get(methodName).recorded = true;
+        counterContainer.addRecordedMethod(methodName);
         recording.remove(methodName);
     }
 
@@ -480,11 +447,10 @@ public class SummaryCreator extends ListenerAdapter {
         // getName() is used for the manually entered names
         if (blackList.contains(methodName)
                 || blackList.contains(mi.getName())
-                //|| methodName.contains("$")
+                || methodName.contains("$")
                 || methodName.contains("$$")
-                //|| methodName.contains("Verify")
+                || methodName.contains("Verify")
                 || methodName.contains("reflect")) {
-            //out.println(methodName + " was blacklisted");
             stopRecording("blacklisted");
             return true;
         }
@@ -493,65 +459,7 @@ public class SummaryCreator extends ListenerAdapter {
     }
 
 
-    @Override
-    public void threadInterrupted(VM vm, ThreadInfo interruptedThread) {
-        stopRecording();
-    }
 
-    @Override
-    public void objectLocked(VM vm, ThreadInfo currentThread, ElementInfo lockedObject) {
-        stopRecording();
-    }
-
-    @Override
-    public void objectUnlocked(VM vm, ThreadInfo currentThread, ElementInfo unlockedObject) {
-        stopRecording();
-    }
-
-    @Override
-    public void objectWait(VM vm, ThreadInfo currentThread, ElementInfo waitingObject) {
-        stopRecording();
-    }
-
-    @Override
-    public void objectNotify(VM vm, ThreadInfo currentThread, ElementInfo notifyingObject) {
-        stopRecording();
-    }
-
-    @Override
-    public void objectNotifyAll(VM vm, ThreadInfo currentThread, ElementInfo notifyingObject) {
-        stopRecording();
-    }
-
-    @Override
-    public void objectExposed(VM vm, ThreadInfo currentThread, ElementInfo fieldOwnerObject, ElementInfo exposedObject) {
-        stopRecording();
-    }
-
-    @Override
-    public void objectShared(VM vm, ThreadInfo currentThread, ElementInfo sharedObject) {
-        stopRecording();
-    }
-
-    @Override
-    public void choiceGeneratorRegistered(VM vm, ChoiceGenerator<?> nextCG, ThreadInfo currentThread, Instruction executedInstruction) {
-        stopRecording();
-    }
-
-    @Override
-    public void choiceGeneratorSet(VM vm, ChoiceGenerator<?> newCG) {
-        stopRecording();
-    }
-
-    @Override
-    public void choiceGeneratorAdvanced(VM vm, ChoiceGenerator<?> currentCG) {
-        stopRecording();
-    }
-
-    @Override
-    public void exceptionThrown(VM vm, ThreadInfo currentThread, ElementInfo thrownException) {
-        //stopRecording();
-    }
 
     // Search listener part
     @Override
@@ -561,52 +469,20 @@ public class SummaryCreator extends ListenerAdapter {
         if (skipInit) {
             ThreadInfo tiCurrent = ThreadInfo.getCurrentThread();
             miMain = tiCurrent.getEntryMethod();
-
             out.println("      [skipping static init instructions]");
         }
     }
 
-    @Override
-    public void stateAdvanced(Search search) {
-        stopRecording();
+    private void logSummaryApplication(String methodName, MethodSummary summary) {
+        out.println("applied summary for " + methodName);
+        out.println(summary.context);
+        out.println(summary.mods);
     }
-
-    @Override
-    public void stateBacktracked(Search search) {
-        stopRecording();
-    }
-
 
     @Override
     public void searchFinished(Search search) {
         out.println("----------------------------------- search finished");
         out.println();
-        //methodStatistics();
-        //out.println(methodStatistics());
-    }
-
-
-    public String methodStatistics() {
-        int uniqueMethods = 0;
-        int recordedMethods = 0;
-
-        StringBuilder methodStats = new StringBuilder();
-        methodStats.append("{\"methodStats\":[ ");
-
-        for (String methodName : counterMap.keySet()) {
-            MethodCounter counter = counterMap.get(methodName);
-            uniqueMethods++;
-            assert (counter != null);
-
-            methodStats.append(counter);
-            if (counter.recorded) {
-                recordedMethods++;
-            }
-            methodStats.append(",");
-        }
-
-        methodStats.deleteCharAt(methodStats.length() - 1);
-        methodStats.append("]}");
-        return methodStats.toString();
+        // out.println(counterContainer.getMethodStatistics());
     }
 }
