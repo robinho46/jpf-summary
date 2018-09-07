@@ -1,5 +1,11 @@
 Build
 
+# Gradle
+.gradle/*
+
+# IntelliJ
+.idea/*
+
 # Compiled class file
 *.class
 
