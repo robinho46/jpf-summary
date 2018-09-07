@@ -1,0 +1,4 @@
+rootProject.name = 'jpf-summary'
+
+include(":jpf-core")
+project(':jpf-core').projectDir = new File(settingsDir, '../jpf-core')
