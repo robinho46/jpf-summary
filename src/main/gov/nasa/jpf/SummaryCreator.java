@@ -77,7 +77,6 @@ public class SummaryCreator extends RecordingListener {
         recording = new HashSet<>();
     }
 
-
     @Override
     public void executeInstruction(VM vm, ThreadInfo ti, Instruction instructionToExecute) {
         MethodInfo mi = instructionToExecute.getMethodInfo();
@@ -86,33 +85,18 @@ public class SummaryCreator extends RecordingListener {
             return;
         }
 
-
         if (instructionToExecute instanceof JVMInvokeInstruction) {
             JVMInvokeInstruction call = (JVMInvokeInstruction) instructionToExecute;
             mi = call.getInvokedMethod();
             if (mi == null) {
                 return;
             }
-            String methodName = call.getInvokedMethod().getFullName();
-            if (container.hasSummary(methodName)) {
+            String methodName = mi.getFullName();
+            if (container.hasSummariesForMethod(methodName)) {
                 counterContainer.countAttemptedSummaryMatch(methodName);
 
-                MethodSummary summary;
-                int runningThreads = vm.getThreadList().getCount().alive;
-                if (instructionToExecute instanceof INVOKESTATIC) {
-                    summary = container.hasMatchingContext(methodName, call.getArgumentValues(ti), runningThreads == 1);
-                } else {
-                    StackFrame top = ti.getTopFrame();
-                    byte[] argTypes = mi.getArgumentTypes();
-                    Object[] args = top.getArgumentsValues(ti, argTypes);
-
-                    // call.getArgumentValues() throws NPE here in log4j2 orig
-                    // at line 890 of StackFrame, which is strange cause this is executing the same code
-                    summary = container.hasMatchingContext(methodName, ti.getElementInfo(top.peek(mi.getArgumentsSize() - 1)), args, runningThreads == 1);
-                }
-
+                MethodSummary summary = getApplicableSummary(vm, ti, mi, call);
                 if (summary == null) {
-                    counterContainer.addFailedMatchCount(methodName);
                     return;
                 }
                 counterContainer.addMatchedArgumentsCount(methodName);
@@ -120,7 +104,7 @@ public class SummaryCreator extends RecordingListener {
 
                 // ideally none of the targets should have been frozen
                 // but it seems like they are in log4j1 - fixed
-                if (!summary.mods.canModifyAllTargets()) {
+                if (summary.mods.anyTargetsAreFrozen()) {
                     return;
                 }
 
@@ -144,10 +128,12 @@ public class SummaryCreator extends RecordingListener {
                 // like the one we just applied
                 stopRecording(methodName);
 
-                Instruction nextInstruction = call.getNext();
                 skipped = true;
+
+                Instruction nextInstruction = call.getNext();
                 StackFrame frame = ti.getModifiableTopFrame();
                 frame.removeArguments(mi);
+
                 String returnType = mi.getReturnType();
                 if (returnType.equals("V")) {
                     ti.skipInstruction(nextInstruction);
@@ -159,6 +145,30 @@ public class SummaryCreator extends RecordingListener {
                 ti.skipInstruction(nextInstruction);
             }
         }
+    }
+
+    private MethodSummary getApplicableSummary(VM vm, ThreadInfo ti, MethodInfo mi, JVMInvokeInstruction call) {
+        MethodSummary summary;
+
+        String methodName = mi.getFullName();
+        int runningThreads = vm.getThreadList().getCount().alive;
+        if (call instanceof INVOKESTATIC) {
+            summary = container.hasMatchingContext(methodName, call.getArgumentValues(ti), runningThreads == 1);
+        } else {
+            StackFrame top = ti.getTopFrame();
+            byte[] argTypes = mi.getArgumentTypes();
+            Object[] args = top.getArgumentsValues(ti, argTypes);
+
+            // call.getArgumentValues() throws NPE here in log4j2 orig
+            // at line 890 of StackFrame, which is strange cause this is executing the same code
+            summary = container.hasMatchingContext(methodName, ti.getElementInfo(top.peek(mi.getArgumentsSize() - 1)), args, runningThreads == 1);
+        }
+
+        if (summary == null) {
+            counterContainer.addFailedMatchCount(methodName);
+        }
+
+        return summary;
     }
 
     private void stopRecording(String methodName) {

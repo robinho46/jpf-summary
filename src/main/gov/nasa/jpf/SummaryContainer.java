@@ -41,7 +41,7 @@ class SummaryContainer {
         return summaries == null || summaries.size() < CAPACITY;
     }
 
-    boolean hasSummary(String methodName) {
+    boolean hasSummariesForMethod(String methodName) {
         List<MethodSummary> summaries = container.get(methodName);
         return summaries != null && summaries.size() > 0;
     }

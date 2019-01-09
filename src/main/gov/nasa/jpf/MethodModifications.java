@@ -91,18 +91,18 @@ class MethodModifications {
         return returnValue;
     }
 
-    boolean canModifyAllTargets() {
+    boolean anyTargetsAreFrozen() {
         for (ModifiedFieldData fieldData : modifiedFields.values()) {
             if (fieldData.targetObject.isFrozen())
-                return false;
+                return true;
         }
         for (ModifiedFieldData staticFieldData : modifiedStaticFields.values()) {
             ElementInfo targetClassObject = staticFieldData.classInfo.getModifiableStaticElementInfo();
             if (targetClassObject.isFrozen())
-                return false;
+                return true;
         }
 
-        return true;
+        return false;
     }
 
     void applyModifications() {
