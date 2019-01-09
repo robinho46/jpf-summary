@@ -67,7 +67,7 @@ public class SummaryCreator extends RecordingListener {
         nativeWhiteList.add("max");
     }
 
-    void blacklistAndResetRecording(String reason) {
+    private void blacklistAndResetRecording(String reason) {
         for (String methodName : recording) {
             assert (!recorded.contains(methodName));
             counterContainer.countInterruptedRecording(methodName, reason);

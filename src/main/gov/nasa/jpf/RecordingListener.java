@@ -10,20 +10,20 @@ import gov.nasa.jpf.vm.VM;
 import java.util.HashSet;
 
 public class RecordingListener extends ListenerAdapter {
-    protected static CounterContainer counterContainer = new CounterContainer();
+    static CounterContainer counterContainer = new CounterContainer();
 
     // contains the names of the methods that should never be recorded
     // this could be because they are interrupted by a transition
     // or because they call native methods that we can't track
-    protected static HashSet<String> blackList = new HashSet<>();
+    static HashSet<String> blackList = new HashSet<>();
 
     // contains the names of the methods that have been recorded as
     // doing a complete call-return cycle within a single transition
-    protected static HashSet<String> recorded = new HashSet<>();
+    static HashSet<String> recorded = new HashSet<>();
     // contains the names of the methods currently being recorded
-    protected static HashSet<String> recording = new HashSet<>();
+    static HashSet<String> recording = new HashSet<>();
 
-    void stopRecording() {
+    private void stopRecording() {
         for (String methodName : recording) {
             assert (!recorded.contains(methodName));
             // not conditional, as these interruptions will  override any others

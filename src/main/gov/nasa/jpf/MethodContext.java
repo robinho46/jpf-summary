@@ -10,8 +10,7 @@ class MethodContext {
     private Object[] params;
     private boolean runningAlone;
 
-    private ElementInfo _this;
-    // We need to track Objectref, FieldName, Type(?), Value
+    private ElementInfo callingObject;
     private HashMap<Integer, DependentFieldData> dependentFields;
     private HashMap<String, DependentFieldData> dependentStaticFields;
 
@@ -57,9 +56,9 @@ class MethodContext {
         dependentStaticFields = new HashMap<>();
     }
 
-    public MethodContext(ElementInfo _this, Object[] args, boolean runningAlone) {
+    MethodContext(ElementInfo callingObject, Object[] args, boolean runningAlone) {
         this.runningAlone = runningAlone;
-        this._this = _this;
+        this.callingObject = callingObject;
         params = args;
         for (int i = 0; i < params.length; i++) {
             if (params[i] instanceof ElementInfo) {
@@ -79,7 +78,7 @@ class MethodContext {
      * TODO: Resolve conflicts between contexts.
      * TODO: Add *this* from inner as well, as a field?
      **/
-    public void addContextFields(MethodContext innerContext) {
+    void addContextFields(MethodContext innerContext) {
         HashMap<Integer, DependentFieldData> innerFields = innerContext.getDependentFields();
         HashMap<String, DependentFieldData> innerStaticFields = innerContext.getDependentStaticFields();
 
@@ -95,18 +94,16 @@ class MethodContext {
     }
 
 
-    public boolean match(ElementInfo _this, Object[] args, boolean runningAlone) {
-        assert (this._this != null);
-        if (this._this != _this || !this._this.equals(_this)) {
-            //System.out.println("this mismatch");
-            //System.out.println(this._this + " != " + _this);
+    boolean match(ElementInfo callingObject, Object[] args, boolean runningAlone) {
+        assert (this.callingObject != null);
+        if (this.callingObject != callingObject) {
             return false;
         }
 
         return match(args, runningAlone);
     }
 
-    public boolean match(Object[] args, boolean runningAlone) {
+    boolean match(Object[] args, boolean runningAlone) {
         if (this.runningAlone != runningAlone)
             return false;
         if (!argumentsMatch(args)) {
@@ -118,7 +115,6 @@ class MethodContext {
         // so any field operations that access fields
         // of arguments are safe
         if (!staticFieldsMatch()) {
-            //System.out.println("static fields mismatch");
             return false;
         }
 
@@ -126,37 +122,28 @@ class MethodContext {
         return fieldsMatch();
     }
 
-    private boolean valuesEqual(Object oldValue, Object currentValue) {
+    private boolean valuesDiffer(Object oldValue, Object currentValue) {
         if (oldValue == null) {
-            if (currentValue == null) {
-                return true;
-            } else {
-                return false;
-            }
+            return currentValue != null;
         }
 
         if (oldValue instanceof String) {
             ElementInfo curr = (ElementInfo) currentValue;
             if (curr == null) {
-                return false;
+                return true;
             }
             if (curr.isStringObject()) {
-                return curr.equalsString((String) oldValue);
+                return !curr.equalsString((String) oldValue);
             }
         }
-        return oldValue.equals(currentValue);
+        return !oldValue.equals(currentValue);
     }
 
     private boolean fieldsMatch() {
         for (DependentFieldData fieldData : dependentFields.values()) {
             Object oldValue = fieldData.previousValue;
             Object currentValue = fieldData.sourceObject.getFieldValueObject(fieldData.fieldName);
-            if (!valuesEqual(oldValue, currentValue)) {/*
-        System.out.println("fieldName="+fieldData.fieldName);
-        System.out.println("sourceObject="+fieldData.sourceObject);
-        System.out.println(oldValue + "!=" + currentValue);
-        System.out.println(oldValue == currentValue);
-        System.out.println(oldValue.equals(currentValue));*/
+            if (valuesDiffer(oldValue, currentValue)) {
                 return false;
             }
         }
@@ -165,7 +152,6 @@ class MethodContext {
     }
 
     private boolean staticFieldsMatch() {
-        //assert(dependentStaticFields.isEmpty());
         for (String fieldName : dependentStaticFields.keySet()) {
             DependentFieldData fieldData = dependentStaticFields.get(fieldName);
             ClassInfo ci = fieldData.classInfo;
@@ -173,7 +159,7 @@ class MethodContext {
             // sometimes throws NPE, presumably the ci is not what we want here
             Object currentValue = ci.getStaticFieldValueObject(fieldName);
 
-            if (!valuesEqual(oldValue, currentValue))
+            if (valuesDiffer(oldValue, currentValue))
                 return false;
         }
 
@@ -186,14 +172,14 @@ class MethodContext {
         }
 
         for (int i = 0; i < args.length; i++) {
-            if (!valuesEqual(params[i], args[i]))
+            if (valuesDiffer(params[i], args[i]))
                 return false;
         }
 
         return true;
     }
 
-    public boolean containsField(String fieldName, ElementInfo source) {
+    boolean containsField(String fieldName, ElementInfo source) {
         return dependentFields.containsKey((fieldName + source.toString()).hashCode());
     }
 
@@ -201,10 +187,7 @@ class MethodContext {
         return dependentStaticFields.containsKey(fieldName);
     }
 
-    public void addField(String fieldName, ElementInfo source, Object value) {
-        if (source.isShared()) {
-            System.out.println("READING FROM SHARED OBJECT " + source);
-        }
+    void addField(String fieldName, ElementInfo source, Object value) {
         assert (!source.isShared());
 
         dependentFields.put((fieldName + source.toString()).hashCode(), new DependentFieldData(fieldName, source, value));
@@ -218,19 +201,19 @@ class MethodContext {
         return dependentFields;
     }
 
-    public HashMap<String, DependentFieldData> getDependentStaticFields() {
+    HashMap<String, DependentFieldData> getDependentStaticFields() {
         return dependentStaticFields;
     }
 
 
     @Override
     public String toString() {
-        if (params.length == 0 && dependentFields.size() == 0 && dependentStaticFields.size() == 0 && _this == null) {
+        if (params.length == 0 && dependentFields.size() == 0 && dependentStaticFields.size() == 0 && callingObject == null) {
             return "{}";
         }
         StringBuilder sb = new StringBuilder();
         sb.append("{\"contextSize\":").append(1 + params.length + dependentFields.size() + dependentStaticFields.size());
-        sb.append(", \"this\":\"").append(_this).append("\"");
+        sb.append(", \"this\":\"").append(callingObject).append("\"");
         sb.append(", \"args\":[");
         for (Object arg : params) {
             if (arg != params[params.length - 1]) {

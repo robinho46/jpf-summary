@@ -6,7 +6,7 @@ import gov.nasa.jpf.vm.ElementInfo;
 import java.util.HashMap;
 
 class MethodModifications {
-    public MethodModifications(Object[] args) {
+    MethodModifications(Object[] args) {
         params = args;
         modifiedFields = new HashMap<>();
         modifiedStaticFields = new HashMap<>();
@@ -38,7 +38,7 @@ class MethodModifications {
         // for non-static fields
         ElementInfo targetObject;
         Object newValue;
-        // only needed/valid for Static fields
+        // for static fields
         ClassInfo classInfo;
     }
 
@@ -61,7 +61,6 @@ class MethodModifications {
         sb.append("{\"modsSize\":").append(1 + params.length + modifiedFields.size() + modifiedStaticFields.size());
         sb.append(", \"returnValue\":\"").append(returnValue).append("\"");
         sb.append(", \"args\":[");
-        //sb.append("{args:[");
         for (Object arg : params) {
             if (arg != params[params.length - 1]) {
                 sb.append("\"").append(arg).append("\",");
@@ -84,40 +83,15 @@ class MethodModifications {
         return sb.toString();
     }
 
-    public void setReturnValue(Object returnValue) {
-        //System.out.println(returnValue);
+    void setReturnValue(Object returnValue) {
         this.returnValue = returnValue;
     }
 
-    public Object getReturnValue() {
+    Object getReturnValue() {
         return returnValue;
     }
 
-    private void applyFieldUpdate(String fieldName, String type, ElementInfo ei, Object newValue) {
-        // basic types
-        if (type.equals("int")) {
-            ei.setIntField(fieldName, (Integer) newValue);
-        } else if (type.equals("float")) {
-            ei.setFloatField(fieldName, (Float) newValue);
-        } else if (type.equals("char")) {
-            ei.setCharField(fieldName, (char) newValue);
-        } else if (type.equals("byte")) {
-            ei.setByteField(fieldName, (Byte) newValue);
-        } else if (type.equals("double")) {
-            ei.setDoubleField(fieldName, (Double) newValue);
-        } else if (type.equals("long")) {
-            ei.setLongField(fieldName, (Long) newValue);
-        } else if (type.equals("short")) {
-            ei.setShortField(fieldName, (Short) newValue);
-        } else if (type.equals("boolean")) {
-            ei.setBooleanField(fieldName, (Boolean) newValue);
-        } //else if(type.equals("[")) {
-        // might be problematic - see nhandler GSoC issues
-        //ei.setArrayField(fieldName, (Array) newValue);
-        //}
-    }
-
-    public boolean canModifyAllTargets() {
+    boolean canModifyAllTargets() {
         for (ModifiedFieldData fieldData : modifiedFields.values()) {
             if (fieldData.targetObject.isFrozen())
                 return false;
@@ -131,12 +105,12 @@ class MethodModifications {
         return true;
     }
 
-    public void applyModifications() {
-        for (ModifiedFieldData fieldData : modifiedFields.values()) {
-            assert (!fieldData.targetObject.isShared());
-            applyFieldUpdate(fieldData.fieldName, fieldData.type, fieldData.targetObject, fieldData.newValue);
-        }
+    void applyModifications() {
+        applyFieldUpdates();
+        applyStaticFieldUpdates();
+    }
 
+    private void applyStaticFieldUpdates() {
         for (ModifiedFieldData staticFieldData : modifiedStaticFields.values()) {
             ElementInfo targetClassObject = staticFieldData.classInfo.getModifiableStaticElementInfo();
             assert (targetClassObject != null);
@@ -144,11 +118,47 @@ class MethodModifications {
         }
     }
 
+    private void applyFieldUpdates() {
+        for (ModifiedFieldData fieldData : modifiedFields.values()) {
+            assert (!fieldData.targetObject.isShared());
+            applyFieldUpdate(fieldData.fieldName, fieldData.type, fieldData.targetObject, fieldData.newValue);
+        }
+    }
+
+    private void applyFieldUpdate(String fieldName, String type, ElementInfo ei, Object newValue) {
+        switch (type) {
+            case "int":
+                ei.setIntField(fieldName, (Integer) newValue);
+                break;
+            case "float":
+                ei.setFloatField(fieldName, (Float) newValue);
+                break;
+            case "char":
+                ei.setCharField(fieldName, (char) newValue);
+                break;
+            case "byte":
+                ei.setByteField(fieldName, (Byte) newValue);
+                break;
+            case "double":
+                ei.setDoubleField(fieldName, (Double) newValue);
+                break;
+            case "long":
+                ei.setLongField(fieldName, (Long) newValue);
+                break;
+            case "short":
+                ei.setShortField(fieldName, (Short) newValue);
+                break;
+            case "boolean":
+                ei.setBooleanField(fieldName, (Boolean) newValue);
+                break;
+        }
+    }
+
     /**
      * Takes another set of modifications and adds them to itself.
      * Needed when a summary is applied during recording.
      **/
-    public void addModificationFields(MethodModifications innerMods) {
+    void addModificationFields(MethodModifications innerMods) {
         HashMap<Integer, ModifiedFieldData> innerFields = innerMods.getModifiedFields();
         HashMap<Integer, ModifiedFieldData> innerStaticFields = innerMods.getModifiedStaticFields();
 
@@ -163,12 +173,12 @@ class MethodModifications {
         }
     }
 
-    public void addField(String fieldName, String type, ElementInfo ei, Object newValue) {
+    void addField(String fieldName, String type, ElementInfo ei, Object newValue) {
         modifiedFields.put((fieldName.hashCode() + ei.hashCode()), new ModifiedFieldData(fieldName, type, ei, newValue));
     }
 
 
-    public void addStaticField(String fieldName, String type, ClassInfo ci, Object newValue) {
+    void addStaticField(String fieldName, String type, ClassInfo ci, Object newValue) {
         modifiedStaticFields.put((fieldName.hashCode() + ci.hashCode()), new ModifiedFieldData(fieldName, type, ci, newValue));
     }
 

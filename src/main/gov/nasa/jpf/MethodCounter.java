@@ -1,7 +1,7 @@
 package gov.nasa.jpf;
 
 class MethodCounter {
-    public MethodCounter(String methodName) {
+    MethodCounter(String methodName) {
         this.methodName = methodName;
         totalCalls = 0;
         recorded = false;
@@ -27,7 +27,7 @@ class MethodCounter {
         return str;
     }
 
-    public boolean isRecorded() {
+    boolean isRecorded() {
         return recorded;
     }
 
@@ -49,18 +49,18 @@ class MethodCounter {
 
     private String methodName;
 
-    public int totalCalls;
+    int totalCalls;
 
     // true if it ever finishes a call-return
     // withing the same transition
-    public boolean recorded;
-    public String reasonForInterruption;
+    boolean recorded;
+    String reasonForInterruption;
 
-    public int readCount;
-    public int writeCount;
-    public int instructionCount;
+    int readCount;
+    int writeCount;
+    int instructionCount;
 
-    public int argsMatchCount;
-    public int attemptedMatchCount;
-    public int failedMatchCount;
+    int argsMatchCount;
+    int attemptedMatchCount;
+    int failedMatchCount;
 }
