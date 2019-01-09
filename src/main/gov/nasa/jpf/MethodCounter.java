@@ -4,7 +4,6 @@ class MethodCounter {
     public MethodCounter(String methodName) {
         this.methodName = methodName;
         totalCalls = 0;
-        runningAlone = 0;
         recorded = false;
         readCount = 0;
         writeCount = 0;
@@ -21,8 +20,6 @@ class MethodCounter {
         String str = "{\"methodName\":\"" + methodName + "\"";
         str += ",\"totalCalls\":" + totalCalls;
         str += ",\"argsMatchCount\":" + argsMatchCount;
-        //str += ",\"readCount\":"+readCount;
-        //str += ",\"writeCount\":"+writeCount;
         str += ",\"instructionCount\":" + instructionCount;
         str += ",\"recorded\":" + recorded;
         str += ",\"interruption\":\"" + reasonForInterruption + "\"";
@@ -53,10 +50,6 @@ class MethodCounter {
     private String methodName;
 
     public int totalCalls;
-
-    // the number of times the method is called
-    // when there's only a single thread.
-    private int runningAlone;
 
     // true if it ever finishes a call-return
     // withing the same transition

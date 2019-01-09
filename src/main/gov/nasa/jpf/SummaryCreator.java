@@ -1,23 +1,8 @@
 package gov.nasa.jpf;
 
-import gov.nasa.jpf.jvm.bytecode.EXECUTENATIVE;
-import gov.nasa.jpf.jvm.bytecode.GETFIELD;
-import gov.nasa.jpf.jvm.bytecode.GETSTATIC;
-import gov.nasa.jpf.jvm.bytecode.INVOKESTATIC;
-import gov.nasa.jpf.jvm.bytecode.JVMInvokeInstruction;
-import gov.nasa.jpf.jvm.bytecode.JVMReturnInstruction;
-import gov.nasa.jpf.jvm.bytecode.PUTFIELD;
-import gov.nasa.jpf.jvm.bytecode.PUTSTATIC;
+import gov.nasa.jpf.jvm.bytecode.*;
 import gov.nasa.jpf.search.Search;
-import gov.nasa.jpf.vm.ElementInfo;
-import gov.nasa.jpf.vm.FieldInfo;
-import gov.nasa.jpf.vm.Instruction;
-import gov.nasa.jpf.vm.MJIEnv;
-import gov.nasa.jpf.vm.MethodInfo;
-import gov.nasa.jpf.vm.StackFrame;
-import gov.nasa.jpf.vm.ThreadInfo;
-import gov.nasa.jpf.vm.Types;
-import gov.nasa.jpf.vm.VM;
+import gov.nasa.jpf.vm.*;
 import gov.nasa.jpf.vm.bytecode.FieldInstruction;
 
 import java.io.PrintWriter;
@@ -68,16 +53,6 @@ public class SummaryCreator extends RecordingListener {
         counterContainer = new CounterContainer();
         modificationMap = new HashMap<>();
 
-        blackList.add("java.io.Bits.getShort([BI)S");
-        blackList.add("java.io.Bits.getLong([BI)J");
-        blackList.add("java.lang.Long.longValue()J");
-
-        //TEST-gov.nasa.jpf.test.java.concurrent.ExecutorServiceTest
-        blackList.add("java.util.concurrent.locks.AbstractOwnableSynchronizer.setExclusiveOwnerThread(Ljava/lang/Thread;)V");
-
-        // Test gov.nasa.jpf.test.mc.basic.SearchMultipleTest
-        blackList.add("java.lang.String.valueOf(Ljava/lang/Object;)Ljava/lang/String;");
-        blackList.add("toString");
 
         // Test gov.nasa.jpf.test.mc.basic.AttrsTest
         // This might actually be "OK",
@@ -92,19 +67,15 @@ public class SummaryCreator extends RecordingListener {
         nativeWhiteList.add("max");
     }
 
-    void stopRecording(String reason) {
+    void blacklistAndResetRecording(String reason) {
         for (String methodName : recording) {
             assert (!recorded.contains(methodName));
-
             counterContainer.countInterruptedRecording(methodName, reason);
-
             blackList.add(methodName);
         }
 
         recording = new HashSet<>();
     }
-
-
 
 
     @Override
@@ -125,9 +96,6 @@ public class SummaryCreator extends RecordingListener {
             String methodName = call.getInvokedMethod().getFullName();
             if (container.hasSummary(methodName)) {
                 counterContainer.countAttemptedSummaryMatch(methodName);
-//                if(counterContainer.getAttemptedMatchCount(methodName) > 300) {
-//                  return;
-//                }
 
                 MethodSummary summary;
                 int runningThreads = vm.getThreadList().getCount().alive;
@@ -169,14 +137,12 @@ public class SummaryCreator extends RecordingListener {
                 }
 
                 counterContainer.addTotalCalls(methodName);
+                logSummaryApplication(methodName, summary);
                 summary.mods.applyModifications();
-                // logSummaryApplication(methodName, summary);
 
                 // at this point we want to make sure that we don't create another summary
                 // like the one we just applied
-                contextMap.remove(methodName);
-                modificationMap.remove(methodName);
-                recording.remove(methodName);
+                stopRecording(methodName);
 
                 Instruction nextInstruction = call.getNext();
                 skipped = true;
@@ -193,6 +159,12 @@ public class SummaryCreator extends RecordingListener {
                 ti.skipInstruction(nextInstruction);
             }
         }
+    }
+
+    private void stopRecording(String methodName) {
+        contextMap.remove(methodName);
+        modificationMap.remove(methodName);
+        recording.remove(methodName);
     }
 
     private void putReturnValueOnStackFrame(String returnType, Object returnValue, StackFrame frame, VM vm) {
@@ -251,7 +223,7 @@ public class SummaryCreator extends RecordingListener {
         //out.println(executedInsn);
         if (executedInsn instanceof JVMInvokeInstruction) {
             // skipping in executeInstruction still results in
-            // this instructionExecuted notification
+            // this instructionExecuted notification surprisingly
             if (skipped) {
                 skipped = false;
                 return;
@@ -289,7 +261,7 @@ public class SummaryCreator extends RecordingListener {
                 byte[] types = mi.getArgumentTypes();
                 for (byte type : types) {
                     if (type == Types.T_ARRAY) {
-                        stopRecording("array argument");
+                        blacklistAndResetRecording("array argument");
                         return;
                     }
                 }
@@ -298,7 +270,7 @@ public class SummaryCreator extends RecordingListener {
                     contextMap.put(methodName, new MethodContext(args, runningThreads == 1));
                 } else {
                     if (ti.getElementInfo(call.getLastObjRef()) == null) {
-                        stopRecording("faulty this");
+                        blacklistAndResetRecording("faulty this");
                         return;
                     }
                     contextMap.put(methodName, new MethodContext(ti.getElementInfo(call.getLastObjRef()), args, runningThreads == 1));
@@ -321,7 +293,7 @@ public class SummaryCreator extends RecordingListener {
             if (nativeWhiteList.contains(mi.getName())) {
                 return;
             }
-            stopRecording("native method");
+            blacklistAndResetRecording("native method");
         } else if (executedInsn instanceof FieldInstruction) {
             String methodName = mi.getFullName();
             if (!recording.contains(methodName))
@@ -344,7 +316,7 @@ public class SummaryCreator extends RecordingListener {
         int storageOffset = fi.getStorageOffset();
         assert (storageOffset != -1);
         if (ei.isShared()) {
-            stopRecording("shared field write");
+            blacklistAndResetRecording("shared field write");
             return;
         }
 
@@ -364,9 +336,9 @@ public class SummaryCreator extends RecordingListener {
     private void handleReadInstruction(String methodName, FieldInstruction finsn) {
         counterContainer.addReadCount(methodName);
 
-        // TODO: Fix this - see comment below
+        // TODO: Remove this - see comment below
         if (finsn instanceof GETSTATIC) {
-            stopRecording("static read");
+            blacklistAndResetRecording("static read");
             return;
         }
         // sometimes this breaks for static, presumably the class is not initialized?
@@ -375,7 +347,7 @@ public class SummaryCreator extends RecordingListener {
         int storageOffset = fi.getStorageOffset();
         assert (storageOffset != -1);
         if (ei.isShared()) {
-            stopRecording("shared field read");
+            blacklistAndResetRecording("shared field read");
             return;
         }
 
@@ -386,7 +358,7 @@ public class SummaryCreator extends RecordingListener {
                     contextMap.get(stackMethodName).addField(finsn.getFieldName(), ei, ei.getFieldValueObject(fi.getName()));
                 }
             }
-        } //
+        }
 //        else if (finsn instanceof GETSTATIC) {
 //            for (String stackMethodName : recording) {
 //                if (!contextMap.get(stackMethodName).containsStaticField(finsn.getFieldName()))
@@ -411,17 +383,17 @@ public class SummaryCreator extends RecordingListener {
 
     private boolean methodStopsRecording(MethodInfo mi, String methodName) {
         if (mi.getReturnTypeCode() == Types.T_ARRAY) {
-            stopRecording("array type");
+            blacklistAndResetRecording("array type");
             return true;
         }
 
         if (mi.getName().equals("<init>")) {
-            stopRecording("<init>");
+            blacklistAndResetRecording("<init>");
             return true;
         }
 
         if (mi.getName().equals("<clinit>")) {
-            stopRecording("<clinit>");
+            blacklistAndResetRecording("<clinit>");
             return true;
         }
 
@@ -430,18 +402,24 @@ public class SummaryCreator extends RecordingListener {
         // getName() is used for the manually entered names
         if (blackList.contains(methodName)
                 || blackList.contains(mi.getName())
+                // LambdaTest.testFreeVariables
                 || methodName.contains("$")
                 || methodName.contains("$$")
                 || methodName.contains("Verify")
+                // SAXParserTest.testSimpleParse, this seems to be the minimal set of methods that have to be ignored
+                // in order to get the test passing. This is genuinely worrying.
+                || methodName.contains("com.sun.org.apache.xerces.internal.util.XMLAttributesImpl.setValue")
+                || methodName.contains("com.sun.org.apache.xerces.internal.xni.QName.setValues")
+                || methodName.contains("com.sun.org.apache.xerces.internal.impl.dtd.DTDGrammar.separator")
+                // gov.nasa.jpf.test.java.concurrent.ExecutorServiceTest and CountDownLatchTest
+                || methodName.contains("java.util.concurrent.locks")
                 || methodName.contains("reflect")) {
-            stopRecording("blacklisted");
+            blacklistAndResetRecording("blacklisted");
             return true;
         }
 
         return false;
     }
-
-
 
 
     // Search listener part
@@ -466,6 +444,6 @@ public class SummaryCreator extends RecordingListener {
     public void searchFinished(Search search) {
         out.println("----------------------------------- search finished");
         out.println();
-        // out.println(counterContainer.getMethodStatistics());
+//        out.println(counterContainer.getMethodStatistics());
     }
 }

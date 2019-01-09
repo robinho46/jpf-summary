@@ -182,9 +182,7 @@ class MethodContext {
 
     private boolean argumentsMatch(Object[] args) {
         if (args.length != params.length) {
-            // throw new exception?
-            assert (false);
-            return false;
+            throw new IllegalArgumentException("Calling method with wrong number of arguments.");
         }
 
         for (int i = 0; i < args.length; i++) {
@@ -207,20 +205,12 @@ class MethodContext {
         if (source.isShared()) {
             System.out.println("READING FROM SHARED OBJECT " + source);
         }
-        assert (!source.isShared());/*
-    if(value instanceof ElementInfo) {
-      ElementInfo ei = (ElementInfo) value;
-      if(ei.isStringObject()) {
-        value = ei.asString();
-        System.out.println("Saving value as " + value);
-      }
-    }*/
+        assert (!source.isShared());
 
         dependentFields.put((fieldName + source.toString()).hashCode(), new DependentFieldData(fieldName, source, value));
     }
 
     public void addStaticField(String fieldName, ClassInfo ci, Object value) {
-
         dependentStaticFields.put(fieldName, new DependentFieldData(fieldName, ci, value));
     }
 
@@ -241,8 +231,7 @@ class MethodContext {
         StringBuilder sb = new StringBuilder();
         sb.append("{\"contextSize\":").append(1 + params.length + dependentFields.size() + dependentStaticFields.size());
         sb.append(", \"this\":\"").append(_this).append("\"");
-        sb.append(", \"args\":[ ");
-        //sb.append("{args:[");
+        sb.append(", \"args\":[");
         for (Object arg : params) {
             if (arg != params[params.length - 1]) {
                 sb.append("\"").append(arg).append("\",");

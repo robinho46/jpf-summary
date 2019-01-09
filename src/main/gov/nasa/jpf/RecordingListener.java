@@ -26,9 +26,8 @@ public class RecordingListener extends ListenerAdapter {
     void stopRecording() {
         for (String methodName : recording) {
             assert (!recorded.contains(methodName));
-            // not conditional, as these interruptions will in a sense override any others
+            // not conditional, as these interruptions will  override any others
             counterContainer.overrideReasonForInterruption(methodName);
-
             blackList.add(methodName);
         }
 

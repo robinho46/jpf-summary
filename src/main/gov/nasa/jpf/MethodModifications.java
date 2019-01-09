@@ -60,7 +60,7 @@ class MethodModifications {
         StringBuilder sb = new StringBuilder();
         sb.append("{\"modsSize\":").append(1 + params.length + modifiedFields.size() + modifiedStaticFields.size());
         sb.append(", \"returnValue\":\"").append(returnValue).append("\"");
-        sb.append(", \"args\":[ ");
+        sb.append(", \"args\":[");
         //sb.append("{args:[");
         for (Object arg : params) {
             if (arg != params[params.length - 1]) {
@@ -94,8 +94,6 @@ class MethodModifications {
     }
 
     private void applyFieldUpdate(String fieldName, String type, ElementInfo ei, Object newValue) {
-        //System.out.println("Setting " + ei + "." + fieldName + " to " + newValue);
-
         // basic types
         if (type.equals("int")) {
             ei.setIntField(fieldName, (Integer) newValue);
