@@ -346,14 +346,15 @@ public class SummaryCreator extends RecordingListener {
     private void handleReadInstruction(String methodName, FieldInstruction finsn) {
         counterContainer.addReadCount(methodName);
 
-        // TODO: Remove this - see comment below
-        if (finsn instanceof GETSTATIC) {
+        FieldInfo fi;
+        try {
+            fi = finsn.getFieldInfo();
+            // thrown if classloader requires a roundtrip
+        } catch (LoadOnJPFRequired loadOnJPFRequired) {
             blacklistAndResetRecording("static read");
             return;
         }
-        // sometimes this breaks for static, presumably the class is not initialized?
         ElementInfo ei = finsn.getLastElementInfo();
-        FieldInfo fi = finsn.getFieldInfo();
         int storageOffset = fi.getStorageOffset();
         assert (storageOffset != -1);
         if (ei.isShared()) {
@@ -368,13 +369,12 @@ public class SummaryCreator extends RecordingListener {
                     contextMap.get(stackMethodName).addField(finsn.getFieldName(), ei, ei.getFieldValueObject(fi.getName()));
                 }
             }
+        } else if (finsn instanceof GETSTATIC) {
+            for (String stackMethodName : recording) {
+                if (!contextMap.get(stackMethodName).containsStaticField(finsn.getFieldName()))
+                    contextMap.get(stackMethodName).addStaticField(finsn.getFieldName(), fi.getClassInfo(), ei.getFieldValueObject(fi.getName()));
+            }
         }
-//        else if (finsn instanceof GETSTATIC) {
-//            for (String stackMethodName : recording) {
-//                if (!contextMap.get(stackMethodName).containsStaticField(finsn.getFieldName()))
-//                    contextMap.get(stackMethodName).addStaticField(finsn.getFieldName(), fi.getClassInfo(), ei.getFieldValueObject(fi.getName()));
-//            }
-//        }
     }
 
     private void completeRecording(String methodName, Object returnValue) {
