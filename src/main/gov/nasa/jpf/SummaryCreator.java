@@ -159,9 +159,10 @@ public class SummaryCreator extends RecordingListener {
             byte[] argTypes = mi.getArgumentTypes();
             Object[] args = top.getArgumentsValues(ti, argTypes);
 
+            ElementInfo calleeObject = ti.getElementInfo(top.getCalleeThis(mi));
             // call.getArgumentValues() throws NPE here in log4j2 orig
             // at line 890 of StackFrame, which is strange cause this is executing the same code
-            summary = container.hasMatchingContext(methodName, ti.getElementInfo(top.peek(mi.getArgumentsSize() - 1)), args, runningThreads == 1);
+            summary = container.hasMatchingContext(methodName, calleeObject, args, runningThreads == 1);
         }
 
         if (summary == null) {

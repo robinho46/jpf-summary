@@ -10,7 +10,7 @@ class MethodContext {
     private Object[] params;
     private boolean runningAlone;
 
-    private ElementInfo callingObject;
+    private ElementInfo calleeObject;
     private HashMap<Integer, DependentFieldData> dependentFields;
     private HashMap<String, DependentFieldData> dependentStaticFields;
 
@@ -56,9 +56,9 @@ class MethodContext {
         dependentStaticFields = new HashMap<>();
     }
 
-    MethodContext(ElementInfo callingObject, Object[] args, boolean runningAlone) {
+    MethodContext(ElementInfo calleeObject, Object[] args, boolean runningAlone) {
         this.runningAlone = runningAlone;
-        this.callingObject = callingObject;
+        this.calleeObject = calleeObject;
         params = args;
         for (int i = 0; i < params.length; i++) {
             if (params[i] instanceof ElementInfo) {
@@ -94,9 +94,9 @@ class MethodContext {
     }
 
 
-    boolean match(ElementInfo callingObject, Object[] args, boolean runningAlone) {
-        assert (this.callingObject != null);
-        if (this.callingObject != callingObject) {
+    boolean match(ElementInfo calleeObject, Object[] args, boolean runningAlone) {
+        assert (this.calleeObject != null);
+        if (this.calleeObject != calleeObject) {
             return false;
         }
 
@@ -208,12 +208,12 @@ class MethodContext {
 
     @Override
     public String toString() {
-        if (params.length == 0 && dependentFields.size() == 0 && dependentStaticFields.size() == 0 && callingObject == null) {
+        if (params.length == 0 && dependentFields.size() == 0 && dependentStaticFields.size() == 0 && calleeObject == null) {
             return "{}";
         }
         StringBuilder sb = new StringBuilder();
         sb.append("{\"contextSize\":").append(1 + params.length + dependentFields.size() + dependentStaticFields.size());
-        sb.append(", \"this\":\"").append(callingObject).append("\"");
+        sb.append(", \"this\":\"").append(calleeObject).append("\"");
         sb.append(", \"args\":[");
         for (Object arg : params) {
             if (arg != params[params.length - 1]) {

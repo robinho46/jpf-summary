@@ -46,14 +46,14 @@ class SummaryContainer {
         return summaries != null && summaries.size() > 0;
     }
 
-    MethodSummary hasMatchingContext(String methodName, ElementInfo callingObject, Object[] args, boolean runningAlone) {
+    MethodSummary hasMatchingContext(String methodName, ElementInfo calleeObject, Object[] args, boolean runningAlone) {
         List<MethodSummary> summaries = container.get(methodName);
         if (summaries == null) {
             return null;
         }
 
         for (MethodSummary summary : summaries) {
-            if (summary.context.match(callingObject, args, runningAlone)) {
+            if (summary.context.match(calleeObject, args, runningAlone)) {
                 return summary;
             }
         }
