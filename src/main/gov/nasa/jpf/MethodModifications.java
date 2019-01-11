@@ -128,28 +128,31 @@ class MethodModifications {
     private void applyFieldUpdate(String fieldName, String type, ElementInfo ei, Object newValue) {
         switch (type) {
             case "int":
-                ei.setIntField(fieldName, (Integer) newValue);
+                ei.setIntField(fieldName, (int) newValue);
                 break;
             case "float":
-                ei.setFloatField(fieldName, (Float) newValue);
+                ei.setFloatField(fieldName, (float) newValue);
                 break;
             case "char":
                 ei.setCharField(fieldName, (char) newValue);
                 break;
             case "byte":
-                ei.setByteField(fieldName, (Byte) newValue);
+                ei.setByteField(fieldName, (byte) newValue);
                 break;
             case "double":
-                ei.setDoubleField(fieldName, (Double) newValue);
+                ei.setDoubleField(fieldName, (double) newValue);
                 break;
             case "long":
-                ei.setLongField(fieldName, (Long) newValue);
+                ei.setLongField(fieldName, (long) newValue);
                 break;
             case "short":
-                ei.setShortField(fieldName, (Short) newValue);
+                ei.setShortField(fieldName, (short) newValue);
                 break;
             case "boolean":
-                ei.setBooleanField(fieldName, (Boolean) newValue);
+                ei.setBooleanField(fieldName, (boolean) newValue);
+                break;
+            case "#objectReference":
+                ei.setReferenceField(fieldName, (int) newValue);
                 break;
         }
     }

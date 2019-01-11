@@ -87,11 +87,13 @@ public class SummaryCreator extends RecordingListener {
 
         if (instructionToExecute instanceof JVMInvokeInstruction) {
             JVMInvokeInstruction call = (JVMInvokeInstruction) instructionToExecute;
+
             mi = call.getInvokedMethod();
             if (mi == null) {
                 return;
             }
             String methodName = mi.getFullName();
+
             if (container.hasSummariesForMethod(methodName)) {
                 counterContainer.countAttemptedSummaryMatch(methodName);
 
@@ -324,21 +326,36 @@ public class SummaryCreator extends RecordingListener {
 
         ElementInfo ei = finsn.getLastElementInfo();
         FieldInfo fi = finsn.getFieldInfo();
+
         int storageOffset = fi.getStorageOffset();
         assert (storageOffset != -1);
+
         if (ei.isShared()) {
             blacklistAndResetRecording("shared field write");
             return;
         }
 
+        if (fi.getTypeCode() == Types.T_ARRAY) {
+            blacklistAndResetRecording("array field");
+            return;
+        }
+
+        String type = fi.getType();
+        Object valueObject = ei.getFieldValueObject(fi.getName());
+
+        if(fi.isReference()) {
+            type = "#objectReference";
+            valueObject =ei.getReferenceField(fi.getName());
+        }
+
         if (finsn instanceof PUTFIELD) {
             for (String stackMethodName : recording) {
-                modificationMap.get(stackMethodName).addField(finsn.getFieldName(), fi.getType(), ei, ei.getFieldValueObject(fi.getName()));
+                modificationMap.get(stackMethodName).addField(finsn.getFieldName(), type, ei, valueObject);
             }
 
         } else if (finsn instanceof PUTSTATIC) {
             for (String stackMethodName : recording) {
-                modificationMap.get(stackMethodName).addStaticField(finsn.getFieldName(), fi.getType(), fi.getClassInfo(), ei.getFieldValueObject(fi.getName()));
+                modificationMap.get(stackMethodName).addStaticField(finsn.getFieldName(), type, fi.getClassInfo(), valueObject);
             }
 
         }
@@ -355,11 +372,18 @@ public class SummaryCreator extends RecordingListener {
             blacklistAndResetRecording("static read");
             return;
         }
+
         ElementInfo ei = finsn.getLastElementInfo();
         int storageOffset = fi.getStorageOffset();
         assert (storageOffset != -1);
+
         if (ei.isShared()) {
             blacklistAndResetRecording("shared field read");
+            return;
+        }
+
+        if (fi.getTypeCode() == Types.T_ARRAY) {
+            blacklistAndResetRecording("array field");
             return;
         }
 
@@ -417,11 +441,6 @@ public class SummaryCreator extends RecordingListener {
                 || methodName.contains("$")
                 || methodName.contains("$$")
                 || methodName.contains("Verify")
-                // SAXParserTest.testSimpleParse, this seems to be the minimal set of methods that have to be ignored
-                // in order to get the test passing. This is genuinely worrying.
-                || methodName.contains("com.sun.org.apache.xerces.internal.util.XMLAttributesImpl.setValue")
-                || methodName.contains("com.sun.org.apache.xerces.internal.xni.QName.setValues")
-                || methodName.contains("com.sun.org.apache.xerces.internal.impl.dtd.DTDGrammar.separator")
                 // gov.nasa.jpf.test.java.concurrent.ExecutorServiceTest and CountDownLatchTest
                 || methodName.contains("java.util.concurrent.locks")
                 || methodName.contains("reflect")) {
