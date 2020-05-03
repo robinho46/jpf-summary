@@ -123,7 +123,7 @@ public class SummaryCreator extends RecordingListener {
                 }
 
                 counterContainer.addTotalCalls(methodName);
-                logSummaryApplication(methodName, summary);
+                //logSummaryApplication(methodName, summary);
                 summary.mods.applyModifications();
 
                 // at this point we want to make sure that we don't create another summary
@@ -474,6 +474,8 @@ public class SummaryCreator extends RecordingListener {
     public void searchFinished(Search search) {
         out.println("----------------------------------- search finished");
         out.println();
-//        out.println(counterContainer.getMethodStatistics());
+        out.println(counterContainer.getMethodStatistics());
+        out.println();
+        out.println(container.toString());
     }
 }

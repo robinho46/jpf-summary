@@ -67,11 +67,32 @@ class SummaryContainer {
         }
 
         for (MethodSummary summary : summaries) {
-
             if (summary.context.match(args, runningAlone)) {
                 return summary;
             }
         }
         return null;
+    }
+
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("{\"summaries\":[");
+        for (String methodName : container.keySet() ) {
+            sb.append("{\"" + methodName + "\":[");
+            for(MethodSummary summary : container.get(methodName)) {
+                sb.append("{");
+                sb.append("\"context\":");
+                sb.append(summary.context);
+                sb.append(",\"modifications\":");
+                sb.append(summary.mods);
+                sb.append("},");
+            }
+            sb.deleteCharAt(sb.length() - 1);
+            sb.append("]},");
+        }
+        sb.deleteCharAt(sb.length() - 1);
+        sb.append("]}");
+        return sb.toString();
     }
 }
