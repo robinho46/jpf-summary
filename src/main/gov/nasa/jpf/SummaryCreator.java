@@ -6,10 +6,7 @@ import gov.nasa.jpf.vm.*;
 import gov.nasa.jpf.vm.bytecode.FieldInstruction;
 
 import java.io.PrintWriter;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Listener implementing a method-summary utility.
@@ -25,6 +22,7 @@ public class SummaryCreator extends RecordingListener {
 
     private final boolean skipInit;
     private final boolean logSummaryApplication = false;
+    private final boolean applySummaries = true;
     private boolean skipped = false;
 
     private final PrintWriter out;
@@ -98,63 +96,69 @@ public class SummaryCreator extends RecordingListener {
             String methodName = mi.getFullName();
 
             if (container.hasSummariesForMethod(methodName)) {
-                counterContainer.countAttemptedSummaryMatch(methodName);
-
-                MethodSummary summary = getApplicableSummary(vm, ti, mi, call);
-                if (summary == null) {
-                    return;
+                if(applySummaries) {
+                    applySummary(methodName, vm, ti, mi, call);
                 }
-                counterContainer.addMatchedArgumentsCount(methodName);
-
-
-                // ideally none of the targets should have been frozen
-                // but it seems like they are in log4j1 - fixed
-                if (summary.mods.anyTargetsAreFrozen()) {
-                    return;
-                }
-
-                // TODO: Get class in a different way that doesn't break in edge-cases
-                if (!summary.context.getDependentStaticFields().isEmpty()) {
-                    return;
-                }
-
-                // We need to ensure that context and modification information
-                // propagates down to other methods that might be recording
-                for (String r : recording) {
-                    contextMap.get(r).addContextFields(summary.context);
-                    modificationMap.get(r).addModificationFields(summary.mods);
-                }
-
-                counterContainer.addTotalCalls(methodName);
-
-                if(logSummaryApplication) {
-                    out.println("applied summary for " + methodName);
-                    out.println(summary.context);
-                    out.println(summary.mods);
-                }
-                summary.mods.applyModifications();
-
-                // at this point we want to make sure that we don't create another summary
-                // like the one we just applied
-                stopRecording(methodName);
-
-                skipped = true;
-
-                Instruction nextInstruction = call.getNext();
-                StackFrame frame = ti.getModifiableTopFrame();
-                frame.removeArguments(mi);
-
-                String returnType = mi.getReturnType();
-                if (returnType.equals("V")) {
-                    ti.skipInstruction(nextInstruction);
-                    return;
-                }
-
-                Object returnValue = summary.mods.getReturnValue();
-                putReturnValueOnStackFrame(returnType, returnValue, frame, vm);
-                ti.skipInstruction(nextInstruction);
             }
         }
+    }
+
+    private void applySummary(String methodName, VM vm, ThreadInfo ti, MethodInfo mi, JVMInvokeInstruction call) {
+        counterContainer.countAttemptedSummaryMatch(methodName);
+
+        MethodSummary summary = getApplicableSummary(vm, ti, mi, call);
+        if (summary == null) {
+            return;
+        }
+        counterContainer.addMatchedArgumentsCount(methodName);
+
+
+        // ideally none of the targets should have been frozen
+        // but it seems like they are in log4j1 - fixed
+        if (summary.mods.anyTargetsAreFrozen()) {
+            return;
+        }
+
+        // TODO: Get class in a different way that doesn't break in edge-cases
+        if (!summary.context.getDependentStaticFields().isEmpty()) {
+            return;
+        }
+
+        // We need to ensure that context and modification information
+        // propagates down to other methods that might be recording
+        for (String r : recording) {
+            contextMap.get(r).addContextFields(summary.context);
+            modificationMap.get(r).addModificationFields(summary.mods);
+        }
+
+        counterContainer.addTotalCalls(methodName);
+
+        if (logSummaryApplication) {
+            out.println("applied summary for " + methodName);
+            out.println(summary.context);
+            out.println(summary.mods);
+        }
+        summary.mods.applyModifications();
+
+        // at this point we want to make sure that we don't create another summary
+        // like the one we just applied
+        stopRecording(methodName);
+
+        skipped = true;
+
+        Instruction nextInstruction = call.getNext();
+        StackFrame frame = ti.getModifiableTopFrame();
+        frame.removeArguments(mi);
+
+        String returnType = mi.getReturnType();
+        if (returnType.equals("V")) {
+            ti.skipInstruction(nextInstruction);
+            return;
+        }
+
+        Object returnValue = summary.mods.getReturnValue();
+        putReturnValueOnStackFrame(returnType, returnValue, frame, vm);
+        ti.skipInstruction(nextInstruction);
     }
 
     private MethodSummary getApplicableSummary(VM vm, ThreadInfo ti, MethodInfo mi, JVMInvokeInstruction call) {
@@ -351,9 +355,9 @@ public class SummaryCreator extends RecordingListener {
         String type = fi.getType();
         Object valueObject = ei.getFieldValueObject(fi.getName());
 
-        if(fi.isReference()) {
+        if (fi.isReference()) {
             type = "#objectReference";
-            valueObject =ei.getReferenceField(fi.getName());
+            valueObject = ei.getReferenceField(fi.getName());
         }
 
         if (finsn instanceof PUTFIELD) {
