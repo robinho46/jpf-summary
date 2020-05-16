@@ -4,7 +4,7 @@ class Particular {
     y = arg;
   }
 
-  public synchronized void incrementY() {
+  public void incrementY() {
     y++;
   }
 

@@ -1,5 +1,3 @@
-import java.util.LinkedList;
-
 class Simple  {
   private static int x;
 
@@ -36,12 +34,7 @@ class Simple  {
 
 
 
-  public static void main(String[] args) {/*
-    new Thread() {
-      public void run() {
-        new Simple().write(42);
-      }
-    }.start();*/
+  public static void main(String[] args) {
     
     new Simple().doSomethingElse(5,true);
     x = 0;
@@ -61,11 +54,14 @@ class Simple  {
     test(s);
     test(s);
     test(s);
-    Particular obj = new Particular(33);
-    obj.incrementY();
-    takeThisObjectAndDoSomething(obj);
-    
-    
-    //System.out.println(obj.getY());
+
+    Particular first = new Particular(33);
+    Particular second = new Particular(33);
+    first.incrementY();
+    first.incrementY();
+    takeThisObjectAndDoSomething(first);
+
+    second.incrementY();
+    takeThisObjectAndDoSomething(second);
   }
 }

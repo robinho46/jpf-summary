@@ -431,14 +431,16 @@ public class SummaryCreator extends RecordingListener {
             blacklistAndResetRecording("<clinit>");
             return true;
         }
+        return blacklistedOrSynthetic(mi, methodName);
 
+    }
+
+    private boolean blacklistedOrSynthetic(MethodInfo mi, String methodName) {
         // if a method is blacklisted, or is a synthetic method
         // methodName will match mi.getFullName,
         // getName() is used for the manually entered names
         if (blackList.contains(methodName)
                 || blackList.contains(mi.getName())
-                // LambdaTest.testFreeVariables
-                || methodName.contains("$")
                 || methodName.contains("$$")
                 || methodName.contains("Verify")
                 // gov.nasa.jpf.test.java.concurrent.ExecutorServiceTest and CountDownLatchTest
