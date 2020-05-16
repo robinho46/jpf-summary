@@ -8,6 +8,8 @@ import gov.nasa.jpf.vm.bytecode.FieldInstruction;
 import java.io.PrintWriter;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Listener implementing a method-summary utility.
@@ -15,21 +17,22 @@ import java.util.HashSet;
 public class SummaryCreator extends RecordingListener {
     // contains the names of native method calls that are known not to have
     // side-effects that can't be captured in the summary
-    private static HashSet<String> nativeWhiteList = new HashSet<>();
+    private static Set<String> nativeWhiteList = new HashSet<>();
 
     private static SummaryContainer container = new SummaryContainer();
-    private static HashMap<String, MethodContext> contextMap = new HashMap<>();
-    private static HashMap<String, MethodModifications> modificationMap = new HashMap<>();
+    private static Map<String, MethodContext> contextMap = new HashMap<>();
+    private static Map<String, MethodModifications> modificationMap = new HashMap<>();
 
-    private boolean skipInit = false;
+    private final boolean skipInit;
+    private final boolean logSummaryApplication = false;
     private boolean skipped = false;
 
-    private PrintWriter out;
+    private final PrintWriter out;
 
     private boolean skip;
     private MethodInfo miMain; // just to make init skipping more efficient
 
-    public SummaryCreator(Config config, JPF jpf) {
+    public SummaryCreator(Config config) {
         //  @jpfoption et.skip_init : boolean - do not log execution before entering main() (default=true).
         skipInit = config.getBoolean("et.skip_init", true);
         if (skipInit) {
@@ -123,7 +126,12 @@ public class SummaryCreator extends RecordingListener {
                 }
 
                 counterContainer.addTotalCalls(methodName);
-                //logSummaryApplication(methodName, summary);
+
+                if(logSummaryApplication) {
+                    out.println("applied summary for " + methodName);
+                    out.println(summary.context);
+                    out.println(summary.mods);
+                }
                 summary.mods.applyModifications();
 
                 // at this point we want to make sure that we don't create another summary
@@ -464,12 +472,6 @@ public class SummaryCreator extends RecordingListener {
             miMain = tiCurrent.getEntryMethod();
             out.println("      [skipping static init instructions]");
         }
-    }
-
-    private void logSummaryApplication(String methodName, MethodSummary summary) {
-        out.println("applied summary for " + methodName);
-        out.println(summary.context);
-        out.println(summary.mods);
     }
 
     @Override
