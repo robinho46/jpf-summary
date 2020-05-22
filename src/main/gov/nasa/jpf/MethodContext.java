@@ -3,7 +3,9 @@ package gov.nasa.jpf;
 import gov.nasa.jpf.vm.ClassInfo;
 import gov.nasa.jpf.vm.ElementInfo;
 
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Objects;
 
 class MethodContext {
 
@@ -205,6 +207,24 @@ class MethodContext {
         return dependentStaticFields;
     }
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        MethodContext context = (MethodContext) o;
+        return runningAlone == context.runningAlone &&
+                Arrays.equals(params, context.params) &&
+                calleeObject.equals(context.calleeObject) &&
+                dependentFields.equals(context.dependentFields) &&
+                dependentStaticFields.equals(context.dependentStaticFields);
+    }
+
+    @Override
+    public int hashCode() {
+        int result = Objects.hash(runningAlone, calleeObject, dependentFields, dependentStaticFields);
+        result = 31 * result + Arrays.hashCode(params);
+        return result;
+    }
 
     @Override
     public String toString() {

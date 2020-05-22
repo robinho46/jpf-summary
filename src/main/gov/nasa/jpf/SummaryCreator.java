@@ -8,6 +8,8 @@ import gov.nasa.jpf.vm.bytecode.FieldInstruction;
 import java.io.PrintWriter;
 import java.util.*;
 
+import static java.util.Collections.singletonList;
+
 /**
  * Listener implementing a method-summary utility.
  */
@@ -17,8 +19,8 @@ public class SummaryCreator extends RecordingListener {
     private static Set<String> nativeWhiteList = new HashSet<>();
 
     private static SummaryContainer container = new SummaryContainer();
-    private static Map<String, MethodContext> contextMap = new HashMap<>();
-    private static Map<String, MethodModifications> modificationMap = new HashMap<>();
+    private static Map<String, LinkedList<MethodContext>> contextMap = new HashMap<>();
+    private static Map<String, LinkedList<MethodModifications>> modificationMap = new HashMap<>();
 
     private final boolean skipInit;
     private final boolean logSummaryApplication = false;
@@ -96,7 +98,7 @@ public class SummaryCreator extends RecordingListener {
             String methodName = mi.getFullName();
 
             if (container.hasSummariesForMethod(methodName)) {
-                if(applySummaries) {
+                if (applySummaries) {
                     applySummary(methodName, vm, ti, mi, call);
                 }
             }
@@ -127,8 +129,14 @@ public class SummaryCreator extends RecordingListener {
         // We need to ensure that context and modification information
         // propagates down to other methods that might be recording
         for (String r : recording) {
-            contextMap.get(r).addContextFields(summary.context);
-            modificationMap.get(r).addModificationFields(summary.mods);
+            List<MethodContext> contexts = contextMap.get(r);
+            for (MethodContext context : contexts) {
+                context.addContextFields(summary.context);
+            }
+            List<MethodModifications> modifications = modificationMap.get(r);
+            for (MethodModifications modification : modifications) {
+                modification.addModificationFields(summary.mods);
+            }
         }
 
         counterContainer.addTotalCalls(methodName);
@@ -142,7 +150,7 @@ public class SummaryCreator extends RecordingListener {
 
         // at this point we want to make sure that we don't create another summary
         // like the one we just applied
-        stopRecording(methodName);
+//        stopRecording(methodName);
 
         skipped = true;
 
@@ -182,7 +190,6 @@ public class SummaryCreator extends RecordingListener {
         if (summary == null) {
             counterContainer.addFailedMatchCount(methodName);
         }
-
         return summary;
     }
 
@@ -281,29 +288,43 @@ public class SummaryCreator extends RecordingListener {
             int runningThreads = vm.getThreadList().getCount().alive;
 
             Object[] args = call.getArgumentValues(ti);
-            if (!contextMap.containsKey(methodName)) {
-                boolean isStatic = executedInsn instanceof INVOKESTATIC;
-                byte[] types = mi.getArgumentTypes();
-                for (byte type : types) {
-                    if (type == Types.T_ARRAY) {
-                        blacklistAndResetRecording("array argument");
-                        return;
-                    }
-                }
-
-                if (isStatic) {
-                    contextMap.put(methodName, new MethodContext(args, runningThreads == 1));
-                } else {
-                    if (ti.getElementInfo(call.getLastObjRef()) == null) {
-                        blacklistAndResetRecording("faulty this");
-                        return;
-                    }
-                    contextMap.put(methodName, new MethodContext(ti.getElementInfo(call.getLastObjRef()), args, runningThreads == 1));
+            boolean isStatic = executedInsn instanceof INVOKESTATIC;
+            byte[] types = mi.getArgumentTypes();
+            for (byte type : types) {
+                if (type == Types.T_ARRAY) {
+                    blacklistAndResetRecording("array argument");
+                    return;
                 }
             }
 
-            if (!modificationMap.containsKey(methodName)) {
-                modificationMap.put(methodName, new MethodModifications(args));
+            LinkedList<MethodContext> contexts = contextMap.get(methodName);
+            MethodContext currentContext;
+
+            if (isStatic) {
+                currentContext = new MethodContext(args, runningThreads == 1);
+            } else {
+                if (ti.getElementInfo(call.getLastObjRef()) == null) {
+                    blacklistAndResetRecording("faulty this");
+                    return;
+                }
+                currentContext = new MethodContext(ti.getElementInfo(call.getLastObjRef()), args, runningThreads == 1);
+            }
+
+            if (contexts == null) {
+                contextMap.put(methodName, new LinkedList<>(singletonList(currentContext)));
+            } else {
+                contexts.addFirst(currentContext);
+                contextMap.put(methodName, contexts);
+            }
+
+            MethodModifications currentMods = new MethodModifications(args);
+            LinkedList<MethodModifications> stored = modificationMap.get(methodName);
+
+            if (stored == null) {
+                modificationMap.put(methodName, new LinkedList<>(singletonList(currentMods)));
+            } else {
+                stored.addFirst(currentMods);
+                modificationMap.put(methodName, stored);
             }
         } else if (executedInsn instanceof JVMReturnInstruction) {
             JVMReturnInstruction ret = (JVMReturnInstruction) executedInsn;
@@ -362,12 +383,12 @@ public class SummaryCreator extends RecordingListener {
 
         if (finsn instanceof PUTFIELD) {
             for (String stackMethodName : recording) {
-                modificationMap.get(stackMethodName).addField(finsn.getFieldName(), type, ei, valueObject);
+                modificationMap.get(stackMethodName).get(0).addField(finsn.getFieldName(), type, ei, valueObject);
             }
 
         } else if (finsn instanceof PUTSTATIC) {
             for (String stackMethodName : recording) {
-                modificationMap.get(stackMethodName).addStaticField(finsn.getFieldName(), type, fi.getClassInfo(), valueObject);
+                modificationMap.get(stackMethodName).get(0).addStaticField(finsn.getFieldName(), type, fi.getClassInfo(), valueObject);
             }
 
         }
@@ -402,30 +423,31 @@ public class SummaryCreator extends RecordingListener {
         if (finsn instanceof GETFIELD) {
             // propagate context to all recording methods
             for (String stackMethodName : recording) {
-                if (!contextMap.get(stackMethodName).containsField(finsn.getFieldName(), ei)) {
-                    contextMap.get(stackMethodName).addField(finsn.getFieldName(), ei, ei.getFieldValueObject(fi.getName()));
+                if (!contextMap.get(stackMethodName).get(0).containsField(finsn.getFieldName(), ei)) {
+                    contextMap.get(stackMethodName).get(0).addField(finsn.getFieldName(), ei, ei.getFieldValueObject(fi.getName()));
                 }
             }
         } else if (finsn instanceof GETSTATIC) {
             for (String stackMethodName : recording) {
-                if (!contextMap.get(stackMethodName).containsStaticField(finsn.getFieldName()))
-                    contextMap.get(stackMethodName).addStaticField(finsn.getFieldName(), fi.getClassInfo(), ei.getFieldValueObject(fi.getName()));
+                if (!contextMap.get(stackMethodName).get(0).containsStaticField(finsn.getFieldName()))
+                    contextMap.get(stackMethodName).get(0).addStaticField(finsn.getFieldName(), fi.getClassInfo(), ei.getFieldValueObject(fi.getName()));
             }
         }
     }
 
     private void completeRecording(String methodName, Object returnValue) {
-        modificationMap.get(methodName).setReturnValue(returnValue);
+        MethodModifications mods = modificationMap.get(methodName).remove(0);
+        mods.setReturnValue(returnValue);
         if (container.canStoreMoreSummaries(methodName)) {
-            container.addSummary(methodName, contextMap.get(methodName), modificationMap.get(methodName));
-            contextMap.remove(methodName);
-            modificationMap.remove(methodName);
-        } else {
-            // stop recording "methodName"
+            MethodContext context = contextMap.get(methodName).remove(0);
+            container.addSummary(methodName, context, mods);
+        }
+
+        if(modificationMap.get(methodName).size() == 0) {
             recorded.add(methodName);
+            recording.remove(methodName);
         }
         counterContainer.addRecordedMethod(methodName);
-        recording.remove(methodName);
     }
 
     private boolean methodStopsRecording(MethodInfo mi, String methodName) {
@@ -444,7 +466,6 @@ public class SummaryCreator extends RecordingListener {
             return true;
         }
         return blacklistedOrSynthetic(mi, methodName);
-
     }
 
     private boolean blacklistedOrSynthetic(MethodInfo mi, String methodName) {

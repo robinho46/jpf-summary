@@ -2,10 +2,7 @@ package gov.nasa.jpf;
 
 import gov.nasa.jpf.vm.ElementInfo;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 
 /**
@@ -80,7 +77,8 @@ class SummaryContainer {
         sb.append("{\"summaries\":[");
         for (String methodName : container.keySet() ) {
             sb.append("{\"" + methodName + "\":[");
-            for(MethodSummary summary : container.get(methodName)) {
+            Set<MethodSummary> uniqueSummaries = new HashSet<>(container.get(methodName));
+            for(MethodSummary summary : uniqueSummaries) {
                 sb.append("{");
                 sb.append("\"context\":");
                 sb.append(summary.context);

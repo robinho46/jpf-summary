@@ -1,5 +1,3 @@
-package pi;
-
 import java.math.BigDecimal;
 
 public class Pi implements java.io.Serializable {

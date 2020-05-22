@@ -3,7 +3,9 @@ package gov.nasa.jpf;
 import gov.nasa.jpf.vm.ClassInfo;
 import gov.nasa.jpf.vm.ElementInfo;
 
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Objects;
 
 class MethodModifications {
     MethodModifications(Object[] args) {
@@ -186,4 +188,21 @@ class MethodModifications {
     }
 
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        MethodModifications that = (MethodModifications) o;
+        return Arrays.equals(params, that.params) &&
+                modifiedFields.equals(that.modifiedFields) &&
+                modifiedStaticFields.equals(that.modifiedStaticFields) &&
+                returnValue.equals(that.returnValue);
+    }
+
+    @Override
+    public int hashCode() {
+        int result = Objects.hash(modifiedFields, modifiedStaticFields, returnValue);
+        result = 31 * result + Arrays.hashCode(params);
+        return result;
+    }
 }

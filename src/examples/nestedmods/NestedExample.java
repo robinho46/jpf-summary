@@ -1,5 +1,3 @@
-package nestedmods;
-
 /**
  * A small example showing that summaries correctly
  * modify the state in the presence of nested calls.

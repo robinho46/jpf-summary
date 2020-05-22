@@ -1,5 +1,3 @@
-package biginteger;
-
 import java.math.BigInteger;
 public class BigInt  {
 

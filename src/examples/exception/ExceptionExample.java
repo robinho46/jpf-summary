@@ -1,5 +1,3 @@
-package exception;
-
 public class ExceptionExample {
   private int x;
   private Exception except;
@@ -8,6 +6,7 @@ public class ExceptionExample {
   }
 
   public void throwingMethod() throws Exception {
+    // throw calls native method - we can't summarise it
     if(x==0) throw except;
   }
 

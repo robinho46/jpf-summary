@@ -1,5 +1,3 @@
-package factorial;
-
 import java.math.BigInteger;
 
 public class Factorial {
@@ -17,7 +15,7 @@ public class Factorial {
 
   public static void main(String[] args) {
     Factorial f = new Factorial();
-    long n = 20;
+    BigInteger n = BigInteger.valueOf(20);
     f.fac(n);
     f.fac(n);
     f.fac(n);

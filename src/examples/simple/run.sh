@@ -2,4 +2,4 @@
 
 [ -e "${JPF_HOME}" ] || JPF_HOME="${HOME}/.jpf/jpf-core"
 
-${JPF_HOME}/bin/jpf  Fib.jpf
+${JPF_HOME}/bin/jpf  Simple.jpf
