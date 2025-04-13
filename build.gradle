@@ -4,28 +4,26 @@ plugins {
 
 version '1.0-SNAPSHOT'
 
-sourceCompatibility = 1.8
+sourceCompatibility = 1.11
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    testCompile group: 'junit', name: 'junit', version: '4.12'
-    compile project(':jpf-core')
+    testImplementation group: 'junit', name: 'junit', version: '4.12'
+    implementation project(':jpf-core')
 }
 
 
 apply from: "gradle/source-sets.gradle"
 apply from: "gradle/build-resources.gradle"
 
-ext.manifestCommonAttrbutes = manifest {
-    attributes(
-            "Built-By": System.getProperty("user.name"),
-            "Implementation-Vendor": "NASA Ames Research Center",
-            "Implementation-Version": version
-    )
-}
+ext.manifestCommonAttributes = [
+    'Built-By': System.getProperty("user.name"),
+    'Implementation-Vendor': 'NASA Ames Research Center',
+    'Implementation-Version': version
+]
 
 task compile {
     group = "JPF Build"
@@ -38,17 +36,26 @@ task compile {
     dependsOn compileExamplesJava
 }
 
-task createRunJpfJar(type: Jar) {
-    archiveName = "RunJPF.jar"
-    destinationDir = file("${buildDir}")
 
-    description = "Creates the ${archiveName} file."
+/*task createRunJpfJar(type: Jar) {
+    archiveBaseName = 'run-jpf'  // använd archiveBaseName istället för archiveName
+    from sourceSets.main.output
+    manifest {
+        attributes 'Main-Class': 'gov.nasa.jpf.JPF'
+    }
+}*/
+
+task createRunJpfJar(type: Jar) {
+    archiveFileName = "RunJPF.jar"
+    destinationDirectory = file("${buildDir}")
+
+    description = "Creates the ${archiveFileName} file."
     group = "JPF Jars"
 
-    dependsOn compile
+    dependsOn compileJava
     dependsOn copyResources
 
-    from(sourceSets.main.java.outputDir) {
+    from(sourceSets.main.output.classesDirs) {
         include "gov/nasa/jpf/tool/Run.class"
         include "gov/nasa/jpf/tool/RunJPF.class"
         include "gov/nasa/jpf/Config.class"
@@ -69,11 +76,12 @@ task createRunJpfJar(type: Jar) {
         include "gov/nasa/jpf/MethodSummary.class"
         include "gov/nasa/jpf/MethodModifications.class"
     }
+
     manifest {
         attributes(
                 "Implementation-Title": "Java Pathfinder core launch system",
                 "Main-Class": "gov.nasa.jpf.tool.RunJPF"
         )
-        from manifestCommonAttrbutes
+        from manifestCommonAttributes
     }
 }

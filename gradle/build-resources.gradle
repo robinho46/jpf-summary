@@ -43,8 +43,8 @@ task copyResources(type: Copy) {
     dependsOn generateVersion
 
     from "build.properties"
-    into sourceSets.main.java.outputDir.path + "/gov/nasa/jpf"
+    into file("${sourceSets.main.resources.srcDirs.first()}/gov/nasa/jpf")
 
     from ".version"
-    into sourceSets.main.java.outputDir.path + "/gov/nasa/jpf"
+    into file("${sourceSets.main.resources.srcDirs.first()}/gov/nasa/jpf")
 }
